@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StatusBar,
   Animated,
   ScrollView,
+  Modal,
 } from "react-native";
 import {
   formatDate,
@@ -19,6 +20,8 @@ import {
 } from "./utils";
 import { useCalendar } from "./CalendarContext";
 import { CalendarViewType } from "./types";
+import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
+import { faCalendarAlt } from "@fortawesome/free-solid-svg-icons";
 
 interface CalendarHeaderProps {
   onPrevious: () => void;
@@ -42,6 +45,8 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
     visibleDays,
     setSelectedDate,
   } = useCalendar();
+
+  const [showCalendarMenu, setShowCalendarMenu] = useState(false);
 
   // Get the dates to display based on the view type
   const dates = useMemo(() => {
@@ -161,6 +166,17 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
     return day === 0 || day === 6; // 0 = domingo, 6 = sábado
   };
 
+  // Toggle calendar view selector menu
+  const toggleCalendarMenu = () => {
+    setShowCalendarMenu(!showCalendarMenu);
+  };
+
+  // Handle selecting a view type
+  const handleSelectViewType = (selectedViewType: CalendarViewType) => {
+    onViewTypeChange(selectedViewType);
+    setShowCalendarMenu(false);
+  };
+
   return (
     <View
       style={[
@@ -186,6 +202,20 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
         </View>
 
         <View style={styles.navigationContainer}>
+          {/* Calendar Icon Button */}
+          <TouchableOpacity
+            style={[
+              styles.calendarIconButton,
+              {
+                backgroundColor: theme.primaryColor,
+              },
+            ]}
+            onPress={toggleCalendarMenu}
+            activeOpacity={0.7}
+          >
+            <FontAwesomeIcon icon={faCalendarAlt} size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.todayButton,
@@ -490,6 +520,140 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           ))}
         </View>
       )}
+
+      {/* Calendar Menu Modal */}
+      <Modal
+        transparent={true}
+        visible={showCalendarMenu}
+        animationType="fade"
+        onRequestClose={() => setShowCalendarMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCalendarMenu(false)}
+        >
+          <View
+            style={[
+              styles.calendarMenu,
+              {
+                backgroundColor: theme.backgroundColor,
+                borderColor: theme.gridLineColor,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.calendarMenuItem,
+                viewType === "day" && {
+                  backgroundColor: `${theme.primaryColor}20`,
+                },
+              ]}
+              onPress={() => handleSelectViewType("day")}
+            >
+              <Text
+                style={[
+                  styles.calendarMenuItemText,
+                  viewType === "day" && {
+                    color: theme.primaryColor,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                {viewTypeLabels.day}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.calendarMenuItem,
+                viewType === "3day" && {
+                  backgroundColor: `${theme.primaryColor}20`,
+                },
+              ]}
+              onPress={() => handleSelectViewType("3day")}
+            >
+              <Text
+                style={[
+                  styles.calendarMenuItemText,
+                  viewType === "3day" && {
+                    color: theme.primaryColor,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                {viewTypeLabels.threeDays}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.calendarMenuItem,
+                viewType === "week" && {
+                  backgroundColor: `${theme.primaryColor}20`,
+                },
+              ]}
+              onPress={() => handleSelectViewType("week")}
+            >
+              <Text
+                style={[
+                  styles.calendarMenuItemText,
+                  viewType === "week" && {
+                    color: theme.primaryColor,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                {viewTypeLabels.week}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.calendarMenuItem,
+                viewType === "workWeek" && {
+                  backgroundColor: `${theme.primaryColor}20`,
+                },
+              ]}
+              onPress={() => handleSelectViewType("workWeek")}
+            >
+              <Text
+                style={[
+                  styles.calendarMenuItemText,
+                  viewType === "workWeek" && {
+                    color: theme.primaryColor,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                {viewTypeLabels.workWeek}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.calendarMenuItem,
+                viewType === "month" && {
+                  backgroundColor: `${theme.primaryColor}20`,
+                },
+              ]}
+              onPress={() => handleSelectViewType("month")}
+            >
+              <Text
+                style={[
+                  styles.calendarMenuItemText,
+                  viewType === "month" && {
+                    color: theme.primaryColor,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                {viewTypeLabels.month}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -620,6 +784,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     textTransform: "uppercase",
+  },
+  calendarIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.2)",
+    justifyContent: "flex-start",
+    alignItems: "flex-end",
+  },
+  calendarMenu: {
+    position: "absolute",
+    top: 80,
+    right: 16,
+    width: 150,
+    borderRadius: 8,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: "hidden",
+  },
+  calendarMenuItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEEEEE",
+  },
+  calendarMenuItemText: {
+    fontSize: 14,
+    color: "#333333",
   },
 });
 

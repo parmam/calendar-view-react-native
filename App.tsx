@@ -21,6 +21,12 @@ import {
   useLoggingControl,
 } from "./src/hooks/useLoggingControl";
 import { logger } from "./src/components/Calendar/utils/logger";
+// Importaciones para FontAwesome
+import { library } from "@fortawesome/fontawesome-svg-core";
+import { faCalendarAlt } from "@fortawesome/free-solid-svg-icons";
+
+// Agregar los iconos que usaremos a la biblioteca de FontAwesome
+library.add(faCalendarAlt);
 
 // Definir horas no disponibles (por ejemplo, fuera del horario laboral)
 const unavailableHours: UnavailableHours = {
@@ -51,56 +57,62 @@ const generateSampleEvents = (): CalendarEvent[] => {
   });
 
   // Event 2: "Junta a las 10 AM" on day 8
+  const event2Start = new Date(currentYear, currentMonth, 8, 10, 0);
   events.push({
     id: "2",
     title: "Junta a las 10 AM",
-    start: new Date(currentYear, currentMonth, 8, 10, 0),
-    end: new Date(currentYear, currentMonth, 8, 11, 30),
+    start: event2Start,
+    end: new Date(event2Start.getTime() + 90 * 60000), // 90 minutos de duración
     color: "#007AFF",
   });
 
   // Event 3: "Almuerzo" on day 10
+  const event3Start = new Date(currentYear, currentMonth, 10, 13, 0);
   events.push({
     id: "3",
     title: "Almuerzo",
-    start: new Date(currentYear, currentMonth, 10, 13, 0),
-    end: new Date(currentYear, currentMonth, 10, 14, 30),
+    start: event3Start,
+    end: new Date(event3Start.getTime() + 90 * 60000), // 90 minutos de duración
     color: "#5AC8FA",
   });
 
   // Event 4: "Doctor" on day 15
+  const event4Start = new Date(currentYear, currentMonth, 15, 16, 0);
   events.push({
     id: "4",
     title: "Doctor",
-    start: new Date(currentYear, currentMonth, 15, 16, 0),
-    end: new Date(currentYear, currentMonth, 15, 17, 0),
+    start: event4Start,
+    end: new Date(event4Start.getTime() + 60 * 60000), // 60 minutos de duración
     color: "#FF3B30",
   });
 
   // Event 5: "Ejercicio" on day 15 (same day as Event 4)
+  const event5Start = new Date(currentYear, currentMonth, 15, 8, 0);
   events.push({
     id: "5",
     title: "Ejercicio",
-    start: new Date(currentYear, currentMonth, 15, 8, 0),
-    end: new Date(currentYear, currentMonth, 15, 9, 0),
+    start: event5Start,
+    end: new Date(event5Start.getTime() + 60 * 60000), // 60 minutos de duración
     color: "#5856D6",
   });
 
   // Event 6: "Proyecto X" on day 16
+  const event6Start = new Date(currentYear, currentMonth, 16, 14, 0);
   events.push({
     id: "6",
     title: "Proyecto X",
-    start: new Date(currentYear, currentMonth, 16, 14, 0),
-    end: new Date(currentYear, currentMonth, 16, 16, 30),
+    start: event6Start,
+    end: new Date(event6Start.getTime() + 150 * 60000), // 150 minutos de duración
     color: "#FF9500",
   });
 
   // Event 7: "Revisión de código" on day 20
+  const event7Start = new Date(currentYear, currentMonth, 20, 9, 0);
   events.push({
     id: "7",
     title: "Revisión de código",
-    start: new Date(currentYear, currentMonth, 20, 9, 0),
-    end: new Date(currentYear, currentMonth, 20, 10, 30),
+    start: event7Start,
+    end: new Date(event7Start.getTime() + 90 * 60000), // 90 minutos de duración
     color: "#4CD964",
   });
 
@@ -119,37 +131,130 @@ const generateSampleEvents = (): CalendarEvent[] => {
   });
 
   // Event 9: "Reunión de equipo" on day 22
+  const event9Start = new Date(currentYear, currentMonth, 22, 15, 0);
   events.push({
     id: "9",
     title: "Reunión de equipo",
-    start: new Date(currentYear, currentMonth, 22, 15, 0),
-    end: new Date(currentYear, currentMonth, 22, 16, 30),
+    start: event9Start,
+    end: new Date(event9Start.getTime() + 90 * 60000), // 90 minutos de duración
     color: "#007AFF",
   });
 
   // Event 10: "Cita con cliente" on day 25
+  const event10Start = new Date(currentYear, currentMonth, 25, 11, 0);
   events.push({
     id: "10",
     title: "Cita con cliente",
-    start: new Date(currentYear, currentMonth, 25, 11, 0),
-    end: new Date(currentYear, currentMonth, 25, 12, 0),
+    start: event10Start,
+    end: new Date(event10Start.getTime() + 60 * 60000), // 60 minutos de duración
     color: "#5AC8FA",
     isDraggable: true,
     isResizable: true,
   });
 
   // Event 11: "Entrenamiento" on day 28
+  const event11Start = new Date(currentYear, currentMonth, 28, 18, 0);
   events.push({
     id: "11",
     title: "Entrenamiento",
-    start: new Date(currentYear, currentMonth, 28, 18, 0),
-    end: new Date(currentYear, currentMonth, 28, 19, 30),
+    start: event11Start,
+    end: new Date(event11Start.getTime() + 90 * 60000), // 90 minutos de duración
     color: "#4CD964",
     recurrence: {
       frequency: "daily",
       interval: 1,
       count: 5,
     },
+  });
+
+  // Agregar algunos eventos para el día actual para asegurar que se vean
+  const todayStart = new Date();
+  todayStart.setHours(10, 0, 0, 0);
+
+  events.push({
+    id: "today-1",
+    title: "Reunión de hoy",
+    start: todayStart,
+    end: new Date(todayStart.getTime() + 60 * 60000), // 60 minutos
+    color: "#007AFF",
+  });
+
+  const todayStart2 = new Date();
+  todayStart2.setHours(14, 30, 0, 0);
+
+  events.push({
+    id: "today-2",
+    title: "Otra reunión",
+    start: todayStart2,
+    end: new Date(todayStart2.getTime() + 90 * 60000), // 90 minutos
+    color: "#FF9500",
+  });
+
+  // Agregar eventos que ocurren simultáneamente (mismo horario)
+  // Evento simultáneo 1 - mismo horario que "Reunión de hoy"
+  events.push({
+    id: "simul-1",
+    title: "Llamada de ventas",
+    start: new Date(todayStart.getTime()),
+    end: new Date(todayStart.getTime() + 45 * 60000), // 45 minutos
+    color: "#5AC8FA",
+  });
+
+  // Evento simultáneo 2 - mismo horario que "Reunión de hoy"
+  events.push({
+    id: "simul-2",
+    title: "Actualización de proyecto",
+    start: new Date(todayStart.getTime() + 15 * 60000), // Comienza 15 min después
+    end: new Date(todayStart.getTime() + 75 * 60000), // 60 minutos desde el inicio
+    color: "#FF3B30",
+  });
+
+  // Evento simultáneo 3 - solapa con "Otra reunión"
+  events.push({
+    id: "simul-3",
+    title: "Revisión de diseño",
+    start: new Date(todayStart2.getTime() - 30 * 60000), // Comienza 30 min antes
+    end: new Date(todayStart2.getTime() + 60 * 60000), // 90 minutos de duración
+    color: "#4CD964",
+  });
+
+  // Eventos múltiples para otro día (mañana)
+  const tomorrowStart = new Date();
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  tomorrowStart.setHours(9, 0, 0, 0);
+
+  // Evento base para mañana
+  events.push({
+    id: "tomorrow-1",
+    title: "Planificación semanal",
+    start: tomorrowStart,
+    end: new Date(tomorrowStart.getTime() + 60 * 60000), // 60 minutos
+    color: "#FF9500",
+  });
+
+  // Eventos simultáneos para mañana (hasta 4 al mismo tiempo)
+  events.push({
+    id: "tomorrow-2",
+    title: "Reunión de equipo",
+    start: new Date(tomorrowStart.getTime()),
+    end: new Date(tomorrowStart.getTime() + 45 * 60000), // 45 minutos
+    color: "#007AFF",
+  });
+
+  events.push({
+    id: "tomorrow-3",
+    title: "Revisión de presupuesto",
+    start: new Date(tomorrowStart.getTime() + 10 * 60000), // 10 min después
+    end: new Date(tomorrowStart.getTime() + 55 * 60000), // 45 minutos desde inicio
+    color: "#5856D6",
+  });
+
+  events.push({
+    id: "tomorrow-4",
+    title: "Entrevista candidato",
+    start: new Date(tomorrowStart.getTime() + 15 * 60000), // 15 min después
+    end: new Date(tomorrowStart.getTime() + 60 * 60000), // 45 minutos desde inicio
+    color: "#5AC8FA",
   });
 
   return events;
@@ -331,7 +436,7 @@ const AppContent = () => {
             events={events}
             initialViewType={viewType}
             initialDate={selectedDate}
-            //timeRange={{ start: 7, end: 22 }}
+            timeRange={{ start: 7, end: 22 }}
             onEventCreate={handleEventCreate}
             onEventUpdate={handleEventUpdate}
             onEventDelete={handleEventDelete}

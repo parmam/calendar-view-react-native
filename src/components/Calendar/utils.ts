@@ -143,17 +143,31 @@ export function filterEventsByDay(
   date: Date,
   includeAllDay: boolean = false
 ): CalendarEvent[] {
+  // Crear fechas de inicio y fin del día para comparar
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
   return events.filter((event) => {
     // Skip all-day events unless explicitly included
     if (event.isAllDay && !includeAllDay) {
       return false;
     }
 
-    const eventDate = new Date(event.start);
+    // Verificar si el evento ocurre durante el día seleccionado
+    // Un evento ocurre en el día si:
+    // - Su inicio está en el día, o
+    // - Su fin está en el día, o
+    // - Su inicio es anterior al día y su fin es posterior al día (eventos de múltiples días)
     return (
-      eventDate.getFullYear() === date.getFullYear() &&
-      eventDate.getMonth() === date.getMonth() &&
-      eventDate.getDate() === date.getDate()
+      // El evento comienza este día
+      (event.start >= startOfDay && event.start <= endOfDay) ||
+      // El evento termina este día
+      (event.end >= startOfDay && event.end <= endOfDay) ||
+      // El evento abarca todo este día (comenzó antes y termina después)
+      (event.start <= startOfDay && event.end >= endOfDay)
     );
   });
 }
@@ -255,30 +269,66 @@ export function getEventPosition(
   const eventStart = new Date(event.start);
   const eventEnd = new Date(event.end);
 
-  // Obtener horas y minutos
-  const startHourTime = eventStart.getHours();
-  const startMinuteTime = eventStart.getMinutes();
-  const endHourTime = eventEnd.getHours();
-  const endMinuteTime = eventEnd.getMinutes();
+  // Normalizar las horas al rango visible
+  let startHourTime = eventStart.getHours();
+  let startMinuteTime = eventStart.getMinutes();
+  let endHourTime = eventEnd.getHours();
+  let endMinuteTime = eventEnd.getMinutes();
+
+  // Para debugging
+  const originalStart = { hour: startHourTime, minute: startMinuteTime };
+  const originalEnd = { hour: endHourTime, minute: endMinuteTime };
+
+  // Asegurarse de que los tiempos estén dentro del rango visible
+  if (startHourTime < startHour) {
+    startHourTime = startHour;
+    startMinuteTime = 0;
+  }
+
+  if (endHourTime > endHour) {
+    endHourTime = endHour;
+    endMinuteTime = 0;
+  }
+
+  // Casos especiales: eventos que comienzan después del rango o terminan antes del rango
+  if (startHourTime > endHour || endHourTime < startHour) {
+    return { top: -9999, height: 0 }; // Evento fuera del rango visible
+  }
+
+  // Asegurarse de que el evento tenga al menos una duración mínima visible
+  if (startHourTime === endHourTime && startMinuteTime === endMinuteTime) {
+    endMinuteTime = startMinuteTime + 30; // Mínimo 30 minutos
+    if (endMinuteTime >= 60) {
+      endHourTime += 1;
+      endMinuteTime -= 60;
+    }
+  }
 
   // Calcular posición superior (top)
-  const eventStartHour = Math.max(startHourTime, startHour);
-  const hoursFromStart = eventStartHour - startHour;
-  const minutesFromHour = startHourTime < startHour ? 0 : startMinuteTime;
-  const minutesPercentage = minutesFromHour / 60;
-
+  const hoursFromStart = startHourTime - startHour;
+  const minutesPercentage = startMinuteTime / 60;
   const top = (hoursFromStart + minutesPercentage) * hourHeight;
 
   // Calcular altura
-  const eventEndHour = Math.min(endHourTime, endHour);
-  const durationHours = eventEndHour - eventStartHour;
-  const durationMinutes =
-    endMinuteTime - (startHourTime < startHour ? 0 : startMinuteTime);
-  const totalMinutes = durationHours * 60 + durationMinutes;
+  let totalMinutes;
+
+  if (endHourTime === startHourTime) {
+    // Si el evento comienza y termina en la misma hora, calcular minutos directamente
+    totalMinutes = endMinuteTime - startMinuteTime;
+  } else {
+    // Si el evento abarca múltiples horas
+    const durationHours = endHourTime - startHourTime;
+    const durationMinutes = endMinuteTime - startMinuteTime;
+    totalMinutes = durationHours * 60 + durationMinutes;
+  }
+
   const height = (totalMinutes / 60) * hourHeight;
 
   // Garantizar una altura mínima para eventos muy cortos
-  return { top, height: Math.max(height, 25) };
+  return {
+    top,
+    height: Math.max(height, 25),
+  };
 }
 
 // Function to check if two events overlap
@@ -293,35 +343,98 @@ export function eventsOverlap(
   );
 }
 
-// Function to group overlapping events
+// Función mejorada para agrupar eventos solapados
 export function groupOverlappingEvents(
   events: CalendarEvent[]
 ): CalendarEvent[][] {
   if (!events.length) return [];
 
-  const sortedEvents = [...events].sort(
-    (a, b) => a.start.getTime() - b.start.getTime()
-  );
-  const groups: CalendarEvent[][] = [];
-  let currentGroup: CalendarEvent[] = [];
+  // Ordenar eventos primero por hora de inicio y luego por duración
+  const sortedEvents = [...events].sort((a, b) => {
+    const startDiff = a.start.getTime() - b.start.getTime();
+    if (startDiff !== 0) return startDiff;
 
-  sortedEvents.forEach((event) => {
-    if (
-      currentGroup.length === 0 ||
-      currentGroup.some((e) => eventsOverlap(e, event))
-    ) {
-      currentGroup.push(event);
-    } else {
-      if (currentGroup.length > 0) {
-        groups.push([...currentGroup]);
-      }
-      currentGroup = [event];
-    }
+    // Para eventos que comienzan al mismo tiempo, priorizar los más largos
+    return (
+      b.end.getTime() -
+      b.start.getTime() -
+      (a.end.getTime() - a.start.getTime())
+    );
   });
 
-  if (currentGroup.length > 0) {
-    groups.push(currentGroup);
+  // Matriz de adyacencia para representar las colisiones entre eventos
+  const overlapMatrix: boolean[][] = Array(sortedEvents.length)
+    .fill(null)
+    .map(() => Array(sortedEvents.length).fill(false));
+
+  // Completar la matriz de colisiones
+  for (let i = 0; i < sortedEvents.length; i++) {
+    for (let j = i + 1; j < sortedEvents.length; j++) {
+      if (eventsOverlap(sortedEvents[i], sortedEvents[j])) {
+        overlapMatrix[i][j] = overlapMatrix[j][i] = true;
+      }
+    }
+  }
+
+  // Utilizar algoritmo de búsqueda en profundidad para encontrar grupos conectados
+  const visited = Array(sortedEvents.length).fill(false);
+  const groups: CalendarEvent[][] = [];
+
+  function dfs(index: number, currentGroup: number[]) {
+    visited[index] = true;
+    currentGroup.push(index);
+
+    for (let i = 0; i < sortedEvents.length; i++) {
+      if (overlapMatrix[index][i] && !visited[i]) {
+        dfs(i, currentGroup);
+      }
+    }
+  }
+
+  // Encontrar todos los grupos conectados
+  for (let i = 0; i < sortedEvents.length; i++) {
+    if (!visited[i]) {
+      const currentGroup: number[] = [];
+      dfs(i, currentGroup);
+      groups.push(currentGroup.map((idx) => sortedEvents[idx]));
+    }
   }
 
   return groups;
+}
+
+// Función auxiliar para encontrar el número máximo de eventos simultáneos
+export function findMaxConcurrentEvents(events: CalendarEvent[]): number {
+  if (events.length <= 1) return events.length;
+
+  // Extraer puntos de tiempo (inicio y fin) de todos los eventos
+  type TimePoint = { time: number; isStart: boolean };
+  const timePoints: TimePoint[] = [];
+
+  events.forEach((event) => {
+    timePoints.push({ time: event.start.getTime(), isStart: true });
+    timePoints.push({ time: event.end.getTime(), isStart: false });
+  });
+
+  // Ordenar puntos de tiempo
+  timePoints.sort((a, b) => {
+    if (a.time !== b.time) return a.time - b.time;
+    // Si los tiempos son iguales, los finales van primero para manejar eventos contiguos
+    return a.isStart ? 1 : -1;
+  });
+
+  let concurrent = 0;
+  let maxConcurrent = 0;
+
+  // Recorrer puntos para encontrar el máximo de eventos simultáneos
+  timePoints.forEach((point) => {
+    if (point.isStart) {
+      concurrent++;
+    } else {
+      concurrent--;
+    }
+    maxConcurrent = Math.max(maxConcurrent, concurrent);
+  });
+
+  return maxConcurrent;
 }

@@ -217,27 +217,120 @@ const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
       overlapGroups.push(currentGroup);
     }
 
-    // Calcular posición y ancho para cada evento
+    // Calcular posición y ancho para cada evento usando un algoritmo más sofisticado
     const positionedEvents: Array<
       CalendarEvent & { left: number; width: number }
     > = [];
 
     overlapGroups.forEach((group) => {
-      // Para cada grupo, distribuir los eventos horizontalmente
-      const totalWidth = columnWidth - 10; // Dejar un pequeño margen
-      const eventWidth =
-        group.length > 1 ? totalWidth / group.length : totalWidth - 10;
+      if (group.length === 1) {
+        // Si solo hay un evento en el grupo, ocupa todo el ancho
+        positionedEvents.push({
+          ...group[0],
+          left: 5,
+          width: columnWidth - 10,
+        });
+        return;
+      }
 
-      group.forEach((event, index) => {
-        // Calcular posición izquierda basada en el índice
-        const left = index * eventWidth + 5; // 5px de margen izquierdo
+      // Para grupos con múltiples eventos, necesitamos resolver colisiones
+      // Paso 1: Crear una matriz de colisiones
+      const collisionMatrix: boolean[][] = [];
+      for (let i = 0; i < group.length; i++) {
+        collisionMatrix[i] = [];
+        for (let j = 0; j < group.length; j++) {
+          if (i === j) {
+            collisionMatrix[i][j] = false;
+            continue;
+          }
+
+          // Verificar colisiones entre eventos
+          const eventA = group[i];
+          const eventB = group[j];
+          collisionMatrix[i][j] =
+            (eventA.start < eventB.end && eventA.end > eventB.start) ||
+            Math.abs(eventA.start.getTime() - eventB.end.getTime()) < 60000 ||
+            Math.abs(eventA.end.getTime() - eventB.start.getTime()) < 60000;
+        }
+      }
+
+      // Paso 2: Asignar columnas a los eventos
+      const eventColumns: number[] = Array(group.length).fill(-1);
+      const columnsCount: number[] = []; // Número de columnas necesarias para cada evento
+
+      // Asignar columnas a cada evento
+      for (let i = 0; i < group.length; i++) {
+        // Encontrar la primera columna disponible para este evento
+        let column = 0;
+        while (true) {
+          let columnAvailable = true;
+
+          // Verificar si esta columna ya tiene un evento que colisiona
+          for (let j = 0; j < i; j++) {
+            if (collisionMatrix[i][j] && eventColumns[j] === column) {
+              columnAvailable = false;
+              break;
+            }
+          }
+
+          if (columnAvailable) {
+            eventColumns[i] = column;
+            // Actualizar contador de columnas
+            while (columnsCount.length <= column) {
+              columnsCount.push(0);
+            }
+            columnsCount[column]++;
+            break;
+          }
+
+          column++;
+        }
+      }
+
+      // Número máximo de columnas necesarias
+      const maxColumn = Math.max(...eventColumns);
+      const totalColumns = maxColumn + 1;
+
+      // Definir ancho y posición de cada evento
+      const totalWidth = columnWidth - 10; // Reservar margen
+      const eventWidth = Math.max(totalWidth / totalColumns, 50); // Ancho mínimo de 50px
+
+      for (let i = 0; i < group.length; i++) {
+        const left = eventColumns[i] * eventWidth + 5; // 5px de margen izquierdo
+        // Calcular ancho real: si columnas adyacentes están vacías, expandir
+        let span = 1; // Por defecto ocupa 1 columna
+
+        // Calcular cuántas columnas puede ocupar a la derecha
+        for (let j = eventColumns[i] + 1; j <= maxColumn; j++) {
+          let canExpand = true;
+          for (let k = 0; k < group.length; k++) {
+            if (k !== i && collisionMatrix[i][k] && eventColumns[k] === j) {
+              canExpand = false;
+              break;
+            }
+          }
+          if (canExpand) span++;
+          else break;
+        }
+
+        const width = Math.min(eventWidth * span - 5, columnWidth - left - 5);
 
         positionedEvents.push({
-          ...event,
+          ...group[i],
           left,
-          width: eventWidth - 5, // 5px de margen derecho
+          width,
         });
-      });
+      }
+    });
+
+    logger.debug("Positioned events with improved overlap algorithm", {
+      totalEvents: positionedEvents.length,
+      positions: positionedEvents.map((e) => ({
+        id: e.id,
+        title: e.title,
+        left: e.left,
+        width: e.width,
+      })),
     });
 
     return positionedEvents;
@@ -249,10 +342,32 @@ const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
     const date = dates[dayIndex];
     const allEvents = filterEventsByDay(events, date);
 
+    // Depuración de eventos
+    logger.debug(`Rendering events for day ${dayIndex}`, {
+      date: date.toISOString(),
+      eventCount: allEvents.length,
+      events: allEvents.map((e) => ({
+        id: e.id,
+        title: e.title,
+        start: e.start.toISOString(),
+        end: e.end.toISOString(),
+      })),
+    });
+
     if (allEvents.length === 0) return null;
 
     // Calcular posición y dimensiones para cada evento
     const positionedEvents = positionEventsWithOverlap(allEvents);
+
+    logger.debug(`Positioned events for day ${dayIndex}`, {
+      count: positionedEvents.length,
+      positioned: positionedEvents.map((e) => ({
+        id: e.id,
+        title: e.title,
+        left: e.left,
+        width: e.width,
+      })),
+    });
 
     return (
       <>
@@ -265,13 +380,35 @@ const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
             HOUR_HEIGHT * zoomLevel
           );
 
+          logger.debug(`Event position for ${event.id}`, {
+            title: event.title,
+            top,
+            height,
+            startHour: event.start.getHours(),
+            startMinute: event.start.getMinutes(),
+            endHour: event.end.getHours(),
+            endMinute: event.end.getMinutes(),
+            rangeStart: timeRange.start,
+            rangeEnd: timeRange.end,
+            hourHeight: HOUR_HEIGHT,
+            zoomLevel,
+          });
+
           // Omitir eventos fuera del área visible
           if (
-            top < 0 ||
-            top > HOUR_HEIGHT * zoomLevel * (timeRange.end - timeRange.start)
+            top < -100 || // Dar un poco de margen superior
+            top >
+              HOUR_HEIGHT * zoomLevel * (timeRange.end - timeRange.start) + 100 // Margen inferior
           ) {
+            logger.debug(`Skipping event ${event.id} - outside visible area`, {
+              top,
+              height,
+            });
             return null;
           }
+
+          // Asegurar una altura mínima para los eventos
+          const effectiveHeight = Math.max(height, 25);
 
           return (
             <Event
@@ -279,6 +416,8 @@ const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
               event={event}
               width={event.width}
               left={event.left}
+              top={top}
+              height={effectiveHeight}
               isResizing={isResizingEvent}
               setIsResizing={setIsResizingEvent}
             />
