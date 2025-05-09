@@ -63,6 +63,31 @@ interface CalendarProps {
   onZoomChange?: (zoomLevel: number) => void;
 }
 
+// Default theme
+const defaultTheme: CalendarTheme = {
+  backgroundColor: "#FFFFFF",
+  calendarBackgroundColor: "#FFFFFF",
+  textColor: "#333333",
+  primaryColor: "#2196F3",
+  secondaryColor: "#F5F5F5",
+  todayIndicatorColor: "#2196F3",
+  selectedDayColor: "#E3F2FD",
+  eventColors: ["#2196F3", "#4CAF50", "#FF9800", "#9C27B0", "#F44336"],
+  hourIndicatorColor: "#FF5722",
+  gridLineColor: "#E0E0E0",
+  headerBackgroundColor: "#FFFFFF",
+  unavailableHoursColor: "rgba(0, 0, 0, 0.05)",
+  weekendColor: "#F5F5F5",
+  eventTextColor: "#FFFFFF",
+  dragCreateIndicatorColor: "rgba(33, 150, 243, 0.3)",
+  dragMovePreviewColor: "rgba(33, 150, 243, 0.3)",
+  overlapIndicatorColor: "rgba(33, 150, 243, 0.15)",
+  connectionLineColor: "#2196F3", // Color para la línea de conexión
+  successColor: "#4CAF50",
+  errorColor: "#F44336",
+  warningColor: "#FF9800",
+};
+
 const CalendarContent: React.FC = () => {
   // Initialize logger
   const logger = useLogger("Calendar");
@@ -316,6 +341,15 @@ const CalendarContent: React.FC = () => {
       const newEnd = new Date(event.end);
       newEnd.setMinutes(newEnd.getMinutes() + minuteDiff);
 
+      logger.debug("Validando arrastre de evento", {
+        eventId: event.id,
+        eventTitle: event.title,
+        originalStart: event.start.toLocaleTimeString(),
+        newStart: newStart.toLocaleTimeString(),
+        minuteDiff,
+        hasUnavailableHours: !!unavailableHours,
+      });
+
       // Verificar si el destino es válido
       if (unavailableHours) {
         // Obtener día de la semana
@@ -326,15 +360,55 @@ const CalendarContent: React.FC = () => {
         if (daysToCheck.includes(dayOfWeek)) {
           // Verificar si la hora cae dentro de algún rango no disponible
           const timeValue = newStart.getHours() + newStart.getMinutes() / 60;
+
+          logger.debug("Verificando restricciones horarias", {
+            eventId: event.id,
+            dayOfWeek,
+            timeValue,
+            day: [
+              "Domingo",
+              "Lunes",
+              "Martes",
+              "Miércoles",
+              "Jueves",
+              "Viernes",
+              "Sábado",
+            ][dayOfWeek],
+            unavailableRanges: unavailableHours.ranges,
+          });
+
           const isUnavailable = unavailableHours.ranges.some(
             (range) => timeValue >= range.start && timeValue < range.end
           );
 
           if (isUnavailable) {
+            logger.debug("Arrastre bloqueado por horario no disponible", {
+              eventId: event.id,
+              dayOfWeek,
+              timeValue,
+              day: [
+                "Domingo",
+                "Lunes",
+                "Martes",
+                "Miércoles",
+                "Jueves",
+                "Viernes",
+                "Sábado",
+              ][dayOfWeek],
+              newStart: newStart.toLocaleTimeString(),
+              minuteDiff,
+            });
             return false; // No permitir arrastrar a esta zona
           }
         }
       }
+
+      logger.debug("Arrastre de evento permitido", {
+        eventId: event.id,
+        newStart: newStart.toLocaleTimeString(),
+        newEnd: newEnd.toLocaleTimeString(),
+        minuteDiff,
+      });
 
       return true; // Permitir arrastrar
     },

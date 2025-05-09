@@ -47,6 +47,7 @@ export type CalendarTheme = {
   dragCreateIndicatorColor: string;
   dragMovePreviewColor: string;
   overlapIndicatorColor: string;
+  connectionLineColor: string;
   successColor: string;
   errorColor: string;
   warningColor: string;

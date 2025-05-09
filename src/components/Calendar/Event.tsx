@@ -14,6 +14,9 @@ import { formatTime, getEventPosition } from "./utils";
 import { CalendarEvent } from "./types";
 import { useLogger } from "./utils/logger";
 
+// Constante para la altura de la hora
+const HOUR_HEIGHT = 60;
+
 interface EventProps {
   event: CalendarEvent;
   width: number;
@@ -123,39 +126,20 @@ const Event: React.FC<EventProps> = ({
     const timeValue = date.getHours() + date.getMinutes() / 60;
 
     // Verificar si la hora cae dentro de algún rango no disponible
-    return unavailableHours.ranges.some(
+    const isUnavailable = unavailableHours.ranges.some(
       (range) => timeValue >= range.start && timeValue < range.end
     );
-  };
 
-  // Calcular la posición temporal al arrastrar
-  const calculatePreviewPosition = (minuteDiff: number): number => {
-    // Calcular las nuevas horas de inicio y fin
-    const newStart = new Date(event.start);
-    newStart.setMinutes(newStart.getMinutes() + minuteDiff);
+    logger.debug("Verificando disponibilidad de horario", {
+      date: date.toISOString(),
+      dayOfWeek,
+      timeValue,
+      isUnavailable,
+      eventId: event.id,
+      eventTitle: event.title,
+    });
 
-    // Verificar si la nueva posición está en un rango no disponible
-    const unavailable = isTimeSlotUnavailable(newStart);
-    setIsTargetUnavailable(unavailable);
-
-    // Obtener la posición visual usando la misma lógica que el evento original
-    const hourHeight =
-      eventHeight /
-      Math.max(
-        1,
-        event.end.getHours() -
-          event.start.getHours() +
-          (event.end.getMinutes() - event.start.getMinutes()) / 60
-      );
-
-    // Calcular posición top basada en las nuevas horas
-    const hoursFromRangeStart = newStart.getHours() - (timeRange?.start || 0);
-    const minutesPercentage = newStart.getMinutes() / 60;
-    const newTop = (hoursFromRangeStart + minutesPercentage) * hourHeight;
-
-    // Asegurarse de que la posición esté dentro de los límites visibles
-    const maxTop = (timeRange?.end || 24) - (timeRange?.start || 0);
-    return Math.max(0, Math.min(newTop, maxTop * hourHeight));
+    return isUnavailable;
   };
 
   // Pan responder for dragging the event
@@ -165,7 +149,13 @@ const Event: React.FC<EventProps> = ({
       onMoveShouldSetPanResponder: () => !isResizing,
       onPanResponderGrant: () => {
         setIsResizing(true);
-        logger.debug("Event drag started", { eventId: event.id });
+        logger.debug("Inicio de arrastre de evento", {
+          eventId: event.id,
+          eventTitle: event.title,
+          startTime: event.start.toLocaleTimeString(),
+          endTime: event.end.toLocaleTimeString(),
+          position: { top, left },
+        });
         setIsPressed(true);
 
         // Highlight the event when being dragged
@@ -192,6 +182,10 @@ const Event: React.FC<EventProps> = ({
                 ? require("expo-haptics").ImpactFeedbackStyle.Medium
                 : require("expo-haptics").ImpactFeedbackStyle.Heavy
             );
+            logger.debug("Feedback háptico aplicado", {
+              eventId: event.id,
+              intensity: hapticOptions.eventMove,
+            });
           } catch (e) {
             logger.debug("Haptic feedback failed", { error: e });
           }
@@ -208,11 +202,25 @@ const Event: React.FC<EventProps> = ({
             event.start.getHours() +
             (event.end.getMinutes() - event.start.getMinutes()) / 60
         );
-        const pixelsPerMinute = eventHeight / (hourDuration * 60);
+
+        // Calcular pixeles por minuto basado en la altura del evento y su duración en minutos
+        const totalMinutes = hourDuration * 60;
+        const pixelsPerMinute = HOUR_HEIGHT / 60; // Usar una constante estable
+
+        // Calcular diferencia en minutos y redondear al minuto más cercano
         const minuteDiff = Math.round(gestureState.dy / pixelsPerMinute);
 
         // Mostrar previsualización si hay cualquier movimiento
         if (Math.abs(gestureState.dy) > 5) {
+          logger.debug("Movimiento durante arrastre", {
+            eventId: event.id,
+            dy: gestureState.dy,
+            pixelsPerMinute,
+            minuteDiff,
+            eventTitle: event.title,
+          });
+
+          // Calcular nueva posición de previsualización
           const newPreviewPosition = calculatePreviewPosition(minuteDiff);
           setPreviewPosition(newPreviewPosition);
         } else {
@@ -233,14 +241,8 @@ const Event: React.FC<EventProps> = ({
 
         // Handle the event update
         if (Math.abs(gestureState.dy) > 10 && onEventUpdate) {
-          // Calculate time difference based on movement
-          const hourDuration = Math.max(
-            1,
-            event.end.getHours() -
-              event.start.getHours() +
-              (event.end.getMinutes() - event.start.getMinutes()) / 60
-          );
-          const pixelsPerMinute = eventHeight / (hourDuration * 60);
+          // Calcular minutos de diferencia basados en una constante estable de píxeles por minuto
+          const pixelsPerMinute = HOUR_HEIGHT / 60;
           const minuteDiff = Math.round(gestureState.dy / pixelsPerMinute);
 
           if (minuteDiff !== 0) {
@@ -250,6 +252,16 @@ const Event: React.FC<EventProps> = ({
             const newEnd = new Date(event.end);
             newEnd.setMinutes(newEnd.getMinutes() + minuteDiff);
 
+            logger.debug("Finalizando arrastre de evento", {
+              eventId: event.id,
+              minuteDiff,
+              originalStart: event.start.toLocaleTimeString(),
+              originalEnd: event.end.toLocaleTimeString(),
+              newStart: newStart.toLocaleTimeString(),
+              newEnd: newEnd.toLocaleTimeString(),
+              eventTitle: event.title,
+            });
+
             // Verificar si la nueva posición está en un rango no disponible
             if (isTimeSlotUnavailable(newStart)) {
               // Si el destino no está disponible, aplicar feedback háptico de error
@@ -258,6 +270,10 @@ const Event: React.FC<EventProps> = ({
                   require("expo-haptics").notificationAsync(
                     require("expo-haptics").NotificationFeedbackType.Error
                   );
+                  logger.debug("Feedback háptico de error aplicado", {
+                    eventId: event.id,
+                    reason: "hora no disponible",
+                  });
                 } catch (e) {
                   logger.debug("Haptic feedback failed", { error: e });
                 }
@@ -272,16 +288,23 @@ const Event: React.FC<EventProps> = ({
               }).start();
 
               // No actualizar si está en una zona no disponible
-              logger.debug("Event move rejected - unavailable time slot", {
-                eventId: event.id,
-                newStart,
-              });
+              logger.debug(
+                "Reubicación de evento rechazada - horario no disponible",
+                {
+                  eventId: event.id,
+                  newStart: newStart.toLocaleTimeString(),
+                  eventTitle: event.title,
+                  dayOfWeek: newStart.getDay(),
+                  timeValue: newStart.getHours() + newStart.getMinutes() / 60,
+                }
+              );
             } else {
-              logger.debug("Event moved", {
+              logger.debug("Evento reubicado exitosamente", {
                 eventId: event.id,
                 minuteDiff,
-                newStart,
-                newEnd,
+                newStart: newStart.toLocaleTimeString(),
+                newEnd: newEnd.toLocaleTimeString(),
+                eventTitle: event.title,
               });
 
               // Update event
@@ -291,7 +314,20 @@ const Event: React.FC<EventProps> = ({
                 end: newEnd,
               });
             }
+          } else {
+            logger.debug("Arrastre de evento sin cambio de posición", {
+              eventId: event.id,
+              minuteDiff,
+            });
           }
+        } else {
+          logger.debug(
+            "Arrastre de evento cancelado (movimiento insuficiente)",
+            {
+              eventId: event.id,
+              dy: gestureState.dy,
+            }
+          );
         }
 
         // Reset translation
@@ -300,6 +336,50 @@ const Event: React.FC<EventProps> = ({
       },
     })
   ).current;
+
+  // Calcular la posición temporal al arrastrar
+  const calculatePreviewPosition = (minuteDiff: number): number => {
+    // Crear una copia de la fecha de inicio original
+    const newStart = new Date(event.start);
+    // Añadir los minutos de diferencia
+    newStart.setMinutes(newStart.getMinutes() + minuteDiff);
+
+    // Verificar si la nueva posición está en un rango no disponible
+    const unavailable = isTimeSlotUnavailable(newStart);
+    setIsTargetUnavailable(unavailable);
+
+    // Calcular la posición exacta usando el mismo algoritmo que TimeGrid.getEventPosition
+    // Primero, calcular la distancia desde la primera hora visible
+    const rangeStartHour = timeRange?.start || 0;
+
+    // Calcular el desplazamiento desde el inicio del rango de tiempo en minutos
+    const startHourDiff = newStart.getHours() - rangeStartHour;
+    const startMinutes = newStart.getMinutes();
+    const totalMinutesFromRangeStart = startHourDiff * 60 + startMinutes;
+
+    // Convertir minutos a píxeles usando la constante HOUR_HEIGHT
+    const exactPosition = (totalMinutesFromRangeStart * HOUR_HEIGHT) / 60;
+
+    // Asegurarse de que la posición esté dentro de los límites visibles
+    const maxHours = (timeRange?.end || 24) - (timeRange?.start || 0);
+    const maxPosition = maxHours * HOUR_HEIGHT;
+    const finalPosition = Math.max(0, Math.min(exactPosition, maxPosition));
+
+    logger.debug("Calculando posición de previsualización", {
+      eventId: event.id,
+      eventTitle: event.title,
+      minuteDiff,
+      newStartTime: newStart.toLocaleTimeString(),
+      startHourDiff,
+      startMinutes,
+      totalMinutesFromRangeStart,
+      exactPosition,
+      finalPosition,
+      isUnavailable: unavailable,
+    });
+
+    return finalPosition;
+  };
 
   // Handler for event press
   const handleEventPress = useCallback(() => {
@@ -353,49 +433,70 @@ const Event: React.FC<EventProps> = ({
     <>
       {/* Indicador de destino cuando se arrastra el evento */}
       {previewPosition !== null && (
-        <Animated.View
-          style={[
-            styles.previewContainer,
-            {
+        <>
+          {/* Línea de conexión entre el evento original y la previsualización */}
+          <View
+            style={{
+              position: "absolute",
+              left: left + width / 2, // Centrado horizontalmente
+              top: Math.min(previewPosition - 30 + eventHeight, top), // Comenzar desde el punto más alto
+              width: 2,
+              height: Math.abs(top - (previewPosition - 30 + eventHeight)), // Calcular distancia exacta
               backgroundColor: isTargetUnavailable
-                ? theme.errorColor || "rgba(244, 67, 54, 0.4)"
-                : theme.dragMovePreviewColor || "rgba(33, 150, 243, 0.4)",
-              borderColor: isTargetUnavailable
                 ? theme.errorColor || "#F44336"
-                : backgroundColor,
-              width,
-              left,
-              top: previewPosition,
-              height: eventHeight,
+                : theme.connectionLineColor || backgroundColor,
               opacity: 0.7,
-              zIndex: 5,
-            },
-          ]}
-        >
-          <View style={styles.previewContent}>
-            <Text
-              style={[
-                styles.previewTitle,
-                {
-                  fontSize: width < 70 ? 9 : 12,
-                  color: isTargetUnavailable ? "#FFFFFF" : "#333333",
-                },
-              ]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {isTargetUnavailable ? "Hora no disponible" : event.title}
-            </Text>
-            {eventHeight >= 40 && width >= 60 && !isTargetUnavailable && (
+              zIndex: 4,
+            }}
+          />
+
+          <Animated.View
+            style={[
+              styles.previewContainer,
+              {
+                backgroundColor: isTargetUnavailable
+                  ? theme.errorColor || "rgba(244, 67, 54, 0.4)"
+                  : theme.dragMovePreviewColor || "rgba(33, 150, 243, 0.4)",
+                borderColor: isTargetUnavailable
+                  ? theme.errorColor || "#F44336"
+                  : backgroundColor,
+                width,
+                left,
+                top: previewPosition - 30, // Posicionar 30px por encima de la posición calculada
+                height: eventHeight,
+                opacity: 0.7,
+                zIndex: 5,
+              },
+            ]}
+          >
+            <View style={styles.previewContent}>
               <Text
-                style={[styles.previewTime, { fontSize: width < 80 ? 8 : 10 }]}
+                style={[
+                  styles.previewTitle,
+                  {
+                    fontSize: width < 70 ? 9 : 12,
+                    color: isTargetUnavailable ? "#FFFFFF" : "#333333",
+                  },
+                ]}
                 numberOfLines={1}
+                ellipsizeMode="tail"
               >
-                {eventTimeText}
+                {isTargetUnavailable ? "Hora no disponible" : event.title}
               </Text>
-            )}
-          </View>
-        </Animated.View>
+              {eventHeight >= 40 && width >= 60 && !isTargetUnavailable && (
+                <Text
+                  style={[
+                    styles.previewTime,
+                    { fontSize: width < 80 ? 8 : 10 },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {eventTimeText}
+                </Text>
+              )}
+            </View>
+          </Animated.View>
+        </>
       )}
 
       {/* Evento principal */}
@@ -412,8 +513,8 @@ const Event: React.FC<EventProps> = ({
             borderLeftWidth: 3,
             borderLeftColor: backgroundColor,
             transform: [{ translateY: translateY }, { scale: scaleAnim }],
-            zIndex: isPressed ? 20 : 10, // Aumentar z-index cuando está seleccionado
-            opacity: width < 60 ? 0.9 : 1, // Ligera transparencia para eventos estrechos
+            zIndex: isPressed || previewPosition !== null ? 20 : 10, // Aumentar z-index cuando está seleccionado o arrastrando
+            opacity: previewPosition !== null ? 0.8 : width < 60 ? 0.9 : 1, // Más transparente durante el arrastre
             shadowOpacity: isPressed ? 0.4 : 0.2, // Más sombra cuando está seleccionado
           },
         ]}

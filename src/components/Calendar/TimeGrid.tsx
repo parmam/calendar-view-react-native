@@ -30,9 +30,38 @@ import Event from "./Event";
 import { CalendarEvent, CalendarViewType } from "./types";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
-const HOUR_HEIGHT = 60;
+// Definir constantes de cuadrícula
+const HOUR_HEIGHT = 60; // Esta altura debe ser consistente en todo el componente
 const TIME_LABEL_WIDTH = 50;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// Función mejorada para calcular posición exacta de eventos
+const getEventPositionExact = (
+  event: CalendarEvent,
+  rangeStartHour: number,
+  rangeEndHour: number,
+  hourHeight: number
+): { top: number; height: number } => {
+  // 1. Calcular minutos totales desde el inicio del rango para la hora de inicio
+  const startHourDiff = event.start.getHours() - rangeStartHour;
+  const startMinutes = event.start.getMinutes();
+  const startTotalMinutes = startHourDiff * 60 + startMinutes;
+  const startPosition = (startTotalMinutes * hourHeight) / 60;
+
+  // 2. Calcular minutos totales desde el inicio del rango para la hora de fin
+  const endHourDiff = event.end.getHours() - rangeStartHour;
+  const endMinutes = event.end.getMinutes();
+  const endTotalMinutes = endHourDiff * 60 + endMinutes;
+  const endPosition = (endTotalMinutes * hourHeight) / 60;
+
+  // 3. Calcular altura basada en la diferencia de posiciones
+  const height = Math.max(endPosition - startPosition, 15); // Altura mínima de 15px
+
+  return {
+    top: startPosition,
+    height,
+  };
+};
 
 interface TimeGridProps {
   viewType: CalendarViewType;
@@ -348,7 +377,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     return positionedEvents;
   };
 
-  // Mejorar la función renderEvents para usar el posicionamiento calculado
+  // Reemplazar getEventPosition en TimeGrid.renderEvents
   const renderEvents = (dayIndex: number) => {
     // Filtrar eventos para este día
     const date = dates[dayIndex];
@@ -384,8 +413,8 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     return (
       <>
         {positionedEvents.map((event) => {
-          // Calcular posición y dimensiones basadas en el tiempo
-          const { top, height } = getEventPosition(
+          // Calcular posición y dimensiones basadas en el tiempo usando la nueva función
+          const { top, height } = getEventPositionExact(
             event,
             timeRange.start,
             timeRange.end,
@@ -631,6 +660,15 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     minute: number
   ) => {
     if (isResizingEvent) {
+      logger.debug("Resaltando zona de destino", {
+        dayIndex,
+        date: dates[dayIndex].toLocaleDateString(),
+        hour,
+        minute,
+        fullTime: `${hour}:${minute.toString().padStart(2, "0")}`,
+        isResizingEvent,
+      });
+
       setDragTarget({ dayIndex, hour, minute });
     } else {
       setDragTarget(null);
@@ -640,9 +678,23 @@ const TimeGrid: React.FC<TimeGridProps> = ({
   // Limpiar la zona de destino cuando se suelta el evento
   useEffect(() => {
     if (!isResizingEvent) {
+      if (dragTarget) {
+        logger.debug("Limpiando zona de destino", {
+          previousTarget: dragTarget
+            ? {
+                dayIndex: dragTarget.dayIndex,
+                date:
+                  dates[dragTarget.dayIndex]?.toLocaleDateString() || "unknown",
+                time: `${dragTarget.hour}:${dragTarget.minute
+                  .toString()
+                  .padStart(2, "0")}`,
+              }
+            : null,
+        });
+      }
       setDragTarget(null);
     }
-  }, [isResizingEvent]);
+  }, [isResizingEvent, dragTarget, dates]);
 
   // Render time labels (left column)
   const renderTimeLabels = () => (
@@ -811,6 +863,18 @@ const TimeGrid: React.FC<TimeGridProps> = ({
                 dragTarget.dayIndex === dayIndex &&
                 dragTarget.hour === hour &&
                 dragTarget.minute === minute;
+
+              if (isCurrentDragTarget) {
+                logger.debug("Renderizando slot resaltado", {
+                  dayIndex,
+                  date: date.toLocaleDateString(),
+                  hour,
+                  minute,
+                  isUnavailable,
+                  top: slotTop,
+                  height: slotHeight,
+                });
+              }
 
               return (
                 <TouchableWithoutFeedback

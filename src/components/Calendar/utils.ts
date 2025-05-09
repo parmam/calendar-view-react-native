@@ -331,6 +331,34 @@ export function getEventPosition(
   };
 }
 
+// Versión optimizada para calcular posición exacta de eventos
+export function getEventPositionExact(
+  event: CalendarEvent,
+  rangeStartHour: number,
+  rangeEndHour: number,
+  hourHeight: number
+): { top: number; height: number } {
+  // 1. Calcular minutos totales desde el inicio del rango para la hora de inicio
+  const startHourDiff = event.start.getHours() - rangeStartHour;
+  const startMinutes = event.start.getMinutes();
+  const startTotalMinutes = startHourDiff * 60 + startMinutes;
+  const startPosition = (startTotalMinutes * hourHeight) / 60;
+
+  // 2. Calcular minutos totales desde el inicio del rango para la hora de fin
+  const endHourDiff = event.end.getHours() - rangeStartHour;
+  const endMinutes = event.end.getMinutes();
+  const endTotalMinutes = endHourDiff * 60 + endMinutes;
+  const endPosition = (endTotalMinutes * hourHeight) / 60;
+
+  // 3. Calcular altura basada en la diferencia de posiciones
+  const height = Math.max(endPosition - startPosition, 15); // Altura mínima de 15px
+
+  return {
+    top: startPosition,
+    height,
+  };
+}
+
 // Function to check if two events overlap
 export function eventsOverlap(
   event1: CalendarEvent,
