@@ -261,8 +261,65 @@ const generateSampleEvents = (): CalendarEvent[] => {
 };
 
 // Debug Controls component
-const DebugControls: React.FC = () => {
+const DebugControls: React.FC<{
+  calendarConfig: any;
+  onConfigChange: (config: any) => void;
+}> = ({ calendarConfig, onConfigChange }) => {
   const { loggingEnabled, enableLogging, disableLogging } = useLoggingControl();
+
+  // Handler for changing preview offset
+  const handlePreviewOffsetChange = (change: number) => {
+    const newOffset = Math.max(
+      5,
+      (calendarConfig.dragPreviewConfig.previewOffset || 20) + change
+    );
+    const newConfig = {
+      ...calendarConfig,
+      dragPreviewConfig: {
+        ...calendarConfig.dragPreviewConfig,
+        previewOffset: newOffset,
+      },
+    };
+    onConfigChange(newConfig);
+    logger.debug("Updated drag preview offset", {
+      previousOffset: calendarConfig.dragPreviewConfig.previewOffset,
+      newOffset,
+      change,
+    });
+  };
+
+  // Set exact value for offset
+  const setExactOffset = (value: number) => {
+    const newOffset = Math.max(5, value);
+    const newConfig = {
+      ...calendarConfig,
+      dragPreviewConfig: {
+        ...calendarConfig.dragPreviewConfig,
+        previewOffset: newOffset,
+      },
+    };
+    onConfigChange(newConfig);
+    logger.debug("Set exact preview offset", {
+      previousOffset: calendarConfig.dragPreviewConfig.previewOffset,
+      newOffset: value,
+    });
+  };
+
+  // Reset to default
+  const resetToDefault = () => {
+    const newConfig = {
+      ...calendarConfig,
+      dragPreviewConfig: {
+        ...calendarConfig.dragPreviewConfig,
+        previewOffset: 20,
+      },
+    };
+    onConfigChange(newConfig);
+    logger.debug("Reset preview offset to default", { newOffset: 20 });
+  };
+
+  // Common offsets for quick testing
+  const quickOffsets = [10, 15, 20, 25, 30, 40, 50];
 
   return (
     <View style={styles.debugControls}>
@@ -301,6 +358,89 @@ const DebugControls: React.FC = () => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      <View style={styles.debugSection}>
+        <Text style={styles.debugSectionTitle}>
+          Drag Preview Offset: {calendarConfig.dragPreviewConfig.previewOffset}
+          px
+        </Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => handlePreviewOffsetChange(-10)}
+          >
+            <Text style={styles.buttonText}>-10px</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => handlePreviewOffsetChange(-5)}
+          >
+            <Text style={styles.buttonText}>-5px</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => handlePreviewOffsetChange(-1)}
+          >
+            <Text style={styles.buttonText}>-1px</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.debugButton} onPress={resetToDefault}>
+            <Text style={styles.buttonText}>Reset</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => handlePreviewOffsetChange(1)}
+          >
+            <Text style={styles.buttonText}>+1px</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => handlePreviewOffsetChange(5)}
+          >
+            <Text style={styles.buttonText}>+5px</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => handlePreviewOffsetChange(10)}
+          >
+            <Text style={styles.buttonText}>+10px</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.debugSectionTitle}>Quick Offset Values</Text>
+        <View style={styles.buttonRow}>
+          {quickOffsets.map((offset) => (
+            <TouchableOpacity
+              key={`offset-${offset}`}
+              style={[
+                styles.debugButton,
+                calendarConfig.dragPreviewConfig.previewOffset === offset
+                  ? styles.activeButton
+                  : null,
+              ]}
+              onPress={() => setExactOffset(offset)}
+            >
+              <Text
+                style={[
+                  styles.buttonText,
+                  calendarConfig.dragPreviewConfig.previewOffset === offset
+                    ? styles.activeButtonText
+                    : null,
+                ]}
+              >
+                {offset}px
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.debugNote}>
+          Current offset: {calendarConfig.dragPreviewConfig.previewOffset}px
+          (recommended: 15-25px)
+        </Text>
+        <Text style={styles.debugNote}>
+          Drag an event to test the preview position.
+        </Text>
+      </View>
     </View>
   );
 };
@@ -311,6 +451,20 @@ const AppContent = () => {
   const [viewType, setViewType] = useState<CalendarViewType>("week");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const { loggingEnabled, enableLogging, disableLogging } = useLoggingControl();
+
+  // Calendar configuration state
+  const [calendarConfig, setCalendarConfig] = useState({
+    dragPreviewConfig: {
+      previewOffset: 20, // Default 20px offset for drag preview
+      connectionLineWidth: 2,
+    },
+  });
+
+  // Handle configuration changes
+  const handleConfigChange = (newConfig: any) => {
+    setCalendarConfig(newConfig);
+  };
 
   // Handle creating a new event
   const handleEventCreate = (event: CalendarEvent) => {
@@ -414,6 +568,7 @@ const AppContent = () => {
     eventTextColor: "#FFFFFF",
     dragCreateIndicatorColor: "rgba(33, 150, 243, 0.3)",
     dragMovePreviewColor: "rgba(33, 150, 243, 0.4)",
+    connectionLineColor: "rgba(33, 150, 243, 0.7)",
     overlapIndicatorColor: "rgba(244, 67, 54, 0.1)",
     successColor: "#4CAF50",
     errorColor: "#F44336",
@@ -428,6 +583,15 @@ const AppContent = () => {
     viewChange: "light" as const,
     error: "heavy" as const,
   };
+
+  logger.debug("Calendar configuration", {
+    viewType,
+    zoomLevel,
+    theme: "custom",
+    hapticOptions,
+    calendarConfig,
+    loggingEnabled,
+  });
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -453,16 +617,18 @@ const AppContent = () => {
             initialDragEnabled={true}
             unavailableHours={unavailableHours}
             hapticOptions={hapticOptions}
+            calendarConfig={calendarConfig}
           />
         </View>
-
+        <DebugControls
+          calendarConfig={calendarConfig}
+          onConfigChange={handleConfigChange}
+        />
         <StatusBar style="auto" />
       </SafeAreaView>
     </GestureHandlerRootView>
   );
 };
-
-//<DebugControls />
 
 // Main App with logging provider
 export default function App() {
@@ -500,25 +666,55 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    marginBottom: 8,
   },
   debugButton: {
     backgroundColor: "#eee",
-    padding: 10,
+    padding: 6,
     borderRadius: 5,
-    marginHorizontal: 5,
-    minWidth: 120,
+    marginHorizontal: 2,
+    marginVertical: 2,
+    minWidth: 38,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
   },
   activeButton: {
     backgroundColor: "#2196F3",
+    borderColor: "#1976D2",
   },
   buttonText: {
     fontWeight: "500",
     color: "#333",
+    fontSize: 11,
+    textAlign: "center",
   },
   activeButtonText: {
     fontWeight: "bold",
     color: "#fff",
+  },
+  debugSection: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#ddd",
+    marginBottom: 8,
+  },
+  debugSectionTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 5,
+    marginTop: 5,
+    textAlign: "center",
+    color: "#333",
+  },
+  debugNote: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 5,
+    textAlign: "center",
   },
 });

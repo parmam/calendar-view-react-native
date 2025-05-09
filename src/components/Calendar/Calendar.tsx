@@ -36,6 +36,7 @@ import {
   CalendarTheme,
   UnavailableHours,
   HapticOptions,
+  CalendarConfig,
 } from "./types";
 
 interface CalendarProps {
@@ -51,6 +52,7 @@ interface CalendarProps {
   unavailableHours?: UnavailableHours;
   timezone?: string;
   hapticOptions?: Partial<HapticOptions>;
+  calendarConfig?: Partial<CalendarConfig>;
   initialZoomLevel?: number;
   initialDragEnabled?: boolean;
   onEventPress?: (event: CalendarEvent) => void;
@@ -473,6 +475,7 @@ const Calendar: React.FC<CalendarProps> = ({
   unavailableHours,
   timezone,
   hapticOptions,
+  calendarConfig,
   initialZoomLevel = 1,
   initialDragEnabled = true,
   onEventPress,
@@ -529,6 +532,7 @@ const Calendar: React.FC<CalendarProps> = ({
         unavailableHours={unavailableHours}
         timezone={timezone}
         hapticOptions={hapticOptions}
+        calendarConfig={calendarConfig}
         initialZoomLevel={initialZoomLevel}
         initialDragEnabled={initialDragEnabled}
         onEventPress={onEventPress}

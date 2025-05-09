@@ -71,6 +71,15 @@ export type HapticOptions = {
   error?: "light" | "medium" | "heavy";
 };
 
+export type DragPreviewConfig = {
+  previewOffset: number; // Offset in pixels for the drag preview from the event being moved
+  connectionLineWidth?: number; // Width of the connection line between original event and preview
+};
+
+export type CalendarConfig = {
+  dragPreviewConfig: DragPreviewConfig;
+};
+
 export type CalendarContextType = {
   events: CalendarEvent[];
   viewType: CalendarViewType;
@@ -84,6 +93,7 @@ export type CalendarContextType = {
   unavailableHours?: UnavailableHours;
   timezone?: string;
   hapticOptions?: HapticOptions;
+  calendarConfig: CalendarConfig;
   zoomLevel: number;
   isDragEnabled: boolean;
   onEventPress?: (event: CalendarEvent) => void;

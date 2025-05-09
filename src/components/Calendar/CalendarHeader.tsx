@@ -9,6 +9,7 @@ import {
   Animated,
   ScrollView,
   Modal,
+  Dimensions,
 } from "react-native";
 import {
   formatDate,
@@ -22,6 +23,10 @@ import { useCalendar } from "./CalendarContext";
 import { CalendarViewType } from "./types";
 import { FontAwesomeIcon } from "@fortawesome/react-native-fontawesome";
 import { faCalendarAlt } from "@fortawesome/free-solid-svg-icons";
+
+// Ensure this matches the TIME_LABEL_WIDTH in TimeGrid.tsx
+const TIME_LABEL_WIDTH = 50;
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface CalendarHeaderProps {
   onPrevious: () => void;
@@ -422,6 +427,17 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             },
           ]}
         >
+          {/* Time label placeholder to align with TimeGrid */}
+          <View
+            style={[
+              styles.timeLabelPlaceholder,
+              {
+                borderRightWidth: 1,
+                borderRightColor: theme.gridLineColor,
+              },
+            ]}
+          />
+
           {dates.map((date, index) => {
             const isCurrentDay = isToday(date);
             const isWeekendDay = isWeekend(date);
@@ -492,6 +508,17 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             },
           ]}
         >
+          {/* Time label placeholder for month view too */}
+          <View
+            style={[
+              styles.timeLabelPlaceholder,
+              {
+                borderRightWidth: 1,
+                borderRightColor: theme.gridLineColor,
+              },
+            ]}
+          />
+
           {["D", "L", "M", "M", "J", "V", "S"].map((day, index) => (
             <View
               key={index}
@@ -506,12 +533,8 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
               <Text
                 style={[
                   styles.monthDayText,
-                  {
-                    color:
-                      index === 0 || index === 6
-                        ? theme.secondaryColor
-                        : theme.textColor,
-                  },
+                  { color: theme.textColor },
+                  (index === 0 || index === 6) && { opacity: 0.7 },
                 ]}
               >
                 {day}
@@ -750,8 +773,12 @@ const styles = StyleSheet.create({
   },
   daysContainer: {
     flexDirection: "row",
-    paddingHorizontal: 8,
+    paddingHorizontal: 0,
     paddingVertical: 8,
+  },
+  timeLabelPlaceholder: {
+    width: TIME_LABEL_WIDTH,
+    height: "100%",
   },
   dayCell: {
     flex: 1,
@@ -771,7 +798,7 @@ const styles = StyleSheet.create({
   },
   monthDaysRow: {
     flexDirection: "row",
-    paddingHorizontal: 8,
+    paddingHorizontal: 0,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(229, 229, 234, 0.6)",

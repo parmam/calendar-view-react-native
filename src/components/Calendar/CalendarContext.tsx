@@ -7,6 +7,8 @@ import {
   TimeRange,
   UnavailableHours,
   HapticOptions,
+  CalendarConfig,
+  DragPreviewConfig,
 } from "./types";
 
 // Default theme
@@ -34,6 +36,8 @@ export const defaultTheme: CalendarTheme = {
   weekendColor: "#F9F9F9",
   eventTextColor: "#FFFFFF",
   dragCreateIndicatorColor: "rgba(0, 122, 255, 0.3)",
+  dragMovePreviewColor: "rgba(33, 150, 243, 0.4)",
+  connectionLineColor: "rgba(33, 150, 243, 0.7)",
   overlapIndicatorColor: "rgba(255, 59, 48, 0.1)",
   successColor: "#4CD964",
   errorColor: "#FF3B30",
@@ -55,6 +59,14 @@ export const defaultHapticOptions: HapticOptions = {
   error: "heavy",
 };
 
+// Default calendar config
+export const defaultCalendarConfig: CalendarConfig = {
+  dragPreviewConfig: {
+    previewOffset: 20, // Default 20px offset
+    connectionLineWidth: 2,
+  },
+};
+
 // Create context with default values
 const CalendarContext = createContext<CalendarContextType>({
   events: [],
@@ -66,6 +78,7 @@ const CalendarContext = createContext<CalendarContextType>({
   firstDayOfWeek: 0,
   visibleDays: [0, 1, 2, 3, 4, 5, 6], // All days visible by default
   timeInterval: 30, // 30 minutes
+  calendarConfig: defaultCalendarConfig,
   zoomLevel: 1,
   isDragEnabled: true,
   setViewType: () => {},
@@ -88,6 +101,7 @@ interface CalendarProviderProps {
   unavailableHours?: UnavailableHours;
   timezone?: string;
   hapticOptions?: Partial<HapticOptions>;
+  calendarConfig?: Partial<CalendarConfig>;
   initialZoomLevel?: number;
   initialDragEnabled?: boolean;
   onEventPress?: (event: CalendarEvent) => void;
@@ -116,6 +130,7 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
   unavailableHours,
   timezone,
   hapticOptions: customHapticOptions = {},
+  calendarConfig: customCalendarConfig = {},
   initialZoomLevel = 1,
   initialDragEnabled = true,
   onEventPress,
@@ -177,6 +192,16 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
     ...customHapticOptions,
   };
 
+  // Merge default calendar config with custom config
+  const calendarConfig: CalendarConfig = {
+    ...defaultCalendarConfig,
+    ...customCalendarConfig,
+    dragPreviewConfig: {
+      ...defaultCalendarConfig.dragPreviewConfig,
+      ...(customCalendarConfig.dragPreviewConfig || {}),
+    },
+  };
+
   // Event handling functions
   const handleEventCreate = (event: CalendarEvent) => {
     setEvents((prev) => [...prev, event]);
@@ -208,6 +233,7 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
     unavailableHours,
     timezone,
     hapticOptions,
+    calendarConfig,
     zoomLevel,
     isDragEnabled,
     onEventPress,

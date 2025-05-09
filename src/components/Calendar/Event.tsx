@@ -60,6 +60,7 @@ const Event: React.FC<EventProps> = ({
     hapticOptions,
     timeRange,
     unavailableHours,
+    calendarConfig,
   } = useCalendar();
   const [eventHeight, setEventHeight] = useState(height);
   const [isPressed, setIsPressed] = useState(false);
@@ -70,6 +71,25 @@ const Event: React.FC<EventProps> = ({
   const translateY = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
+
+  // Extract preview offset from config, default to 20px if not set
+  const previewOffset = calendarConfig?.dragPreviewConfig?.previewOffset || 20;
+  const connectionLineWidth =
+    calendarConfig?.dragPreviewConfig?.connectionLineWidth || 2;
+
+  // Add state to track the current translateY value
+  const [currentTranslateY, setCurrentTranslateY] = useState(0);
+
+  // Add a listener to the animated value to track changes
+  useEffect(() => {
+    const id = translateY.addListener(({ value }) => {
+      setCurrentTranslateY(value);
+    });
+
+    return () => {
+      translateY.removeListener(id);
+    };
+  }, [translateY]);
 
   // Animate event when selected
   useEffect(() => {
@@ -192,34 +212,46 @@ const Event: React.FC<EventProps> = ({
         }
       },
       onPanResponderMove: (e, gestureState) => {
-        // Update position
+        // Update position - Only use vertical movement (dy)
         translateY.setValue(gestureState.dy);
 
-        // Calcular tiempo en minutos equivalente al desplazamiento con alta precisión
+        // Constante para conversión de píxeles a minutos
         const pixelsPerMinute = HOUR_HEIGHT / 60; // 1 pixel por minuto si HOUR_HEIGHT es 60
 
-        // Usar el valor exacto de dy sin redondeo para cálculos de posición interna
+        // Usar el valor exacto de dy sin redondeo para cálculos de posición
         const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
 
         // Para UI y cálculos de tiempo, redondear al minuto más cercano
         const minuteDiff = Math.round(exactMinuteDiff);
 
-        // Mostrar previsualización si hay cualquier movimiento
-        if (Math.abs(gestureState.dy) > 5) {
-          logger.debug("Movimiento durante arrastre", {
-            eventId: event.id,
-            dy: gestureState.dy,
-            pixelsPerMinute,
-            minuteDiff,
-            exactMinuteDiff,
-            eventTitle: event.title,
-          });
-
+        // Mostrar previsualización si hay cualquier movimiento significativo
+        if (Math.abs(gestureState.dy) > 1) {
           // Calcular nueva posición de previsualización usando el valor exacto
           const newPreviewPosition = calculatePreviewPosition(
-            exactMinuteDiff,
+            gestureState.dy, // Usar directamente el desplazamiento en píxeles
             minuteDiff
           );
+
+          // Registrar información detallada para depuración
+          logger.debug("Movimiento durante arrastre", {
+            eventId: event.id,
+            eventTitle: event.title,
+            dy: gestureState.dy,
+            dx: gestureState.dx, // Logging horizontal movement, but not using it
+            pixel_to_minute_ratio: pixelsPerMinute,
+            minuteDiff,
+            exactMinuteDiff,
+            top,
+            previewOffset,
+            currentTranslateY,
+            newPreviewPosition,
+            previewFinalTop: newPreviewPosition - previewOffset,
+            draggedEventCurrentTop: top + currentTranslateY,
+            distanceBetweenEventAndPreview: Math.abs(
+              newPreviewPosition - previewOffset - (top + currentTranslateY)
+            ),
+          });
+
           setPreviewPosition(newPreviewPosition);
         } else {
           setPreviewPosition(null);
@@ -244,20 +276,33 @@ const Event: React.FC<EventProps> = ({
           const minuteDiff = Math.round(gestureState.dy / pixelsPerMinute);
 
           if (minuteDiff !== 0) {
+            // Create new date objects to avoid modifying the original
             const newStart = new Date(event.start);
             newStart.setMinutes(newStart.getMinutes() + minuteDiff);
 
             const newEnd = new Date(event.end);
             newEnd.setMinutes(newEnd.getMinutes() + minuteDiff);
 
+            // Ensure the day is preserved (only change time)
+            newStart.setFullYear(event.start.getFullYear());
+            newStart.setMonth(event.start.getMonth());
+            newStart.setDate(event.start.getDate());
+
+            newEnd.setFullYear(event.end.getFullYear());
+            newEnd.setMonth(event.end.getMonth());
+            newEnd.setDate(event.end.getDate());
+
             logger.debug("Finalizando arrastre de evento", {
               eventId: event.id,
               minuteDiff,
               originalStart: event.start.toLocaleTimeString(),
+              originalStartDate: event.start.toLocaleDateString(),
               originalEnd: event.end.toLocaleTimeString(),
               newStart: newStart.toLocaleTimeString(),
+              newStartDate: newStart.toLocaleDateString(),
               newEnd: newEnd.toLocaleTimeString(),
               eventTitle: event.title,
+              leftPosition: left, // Aseguramos que mantenemos la misma posición left
             });
 
             // Verificar si la nueva posición está en un rango no disponible
@@ -303,9 +348,10 @@ const Event: React.FC<EventProps> = ({
                 newStart: newStart.toLocaleTimeString(),
                 newEnd: newEnd.toLocaleTimeString(),
                 eventTitle: event.title,
+                leftPosition: left, // Mantenemos la misma posición left
               });
 
-              // Update event
+              // Update event - manteniendo su propiedad left y width originales para evitar cambios de columna
               onEventUpdate({
                 ...event,
                 start: newStart,
@@ -337,52 +383,48 @@ const Event: React.FC<EventProps> = ({
 
   // Calcular la posición temporal al arrastrar
   const calculatePreviewPosition = (
-    exactMinuteDiff: number,
-    roundedMinuteDiff: number
+    dy: number, // Valor en píxeles del desplazamiento
+    roundedMinuteDiff: number // Solo para verificación de disponibilidad
   ): number => {
-    // Crear una copia de la fecha de inicio original
+    // Crear una copia de la fecha de inicio original para verificación de disponibilidad
     const newStart = new Date(event.start);
-    // Añadir los minutos de diferencia redondeados para la nueva hora de inicio mostrada
     newStart.setMinutes(newStart.getMinutes() + roundedMinuteDiff);
+
+    // Importante: Mantener el mismo día, solo cambiamos la hora
+    newStart.setFullYear(event.start.getFullYear());
+    newStart.setMonth(event.start.getMonth());
+    newStart.setDate(event.start.getDate());
 
     // Verificar si la nueva posición está en un rango no disponible
     const unavailable = isTimeSlotUnavailable(newStart);
     setIsTargetUnavailable(unavailable);
 
-    // Calcular la posición exacta usando valores sin redondear para mayor precisión
-    const rangeStartHour = timeRange?.start || 0;
+    // POSICIONAMIENTO DIRECTO: simplemente desplazar la posición original
+    // por la cantidad exacta de píxeles del dy
+    const directPosition = top + dy;
 
-    // Calcular el desplazamiento desde el inicio del rango de tiempo
-    const startHourDiff = event.start.getHours() - rangeStartHour;
-    const startMinutes = event.start.getMinutes();
-
-    // Usar el valor exacto de minuteDiff para el cálculo de posición
-    const totalMinutesFromRangeStart =
-      startHourDiff * 60 + startMinutes + exactMinuteDiff;
-
-    // Convertir minutos a píxeles usando la constante HOUR_HEIGHT
-    const exactPosition = (totalMinutesFromRangeStart * HOUR_HEIGHT) / 60;
+    // Registrar información detallada para depuración
+    logger.debug("Preview position calculation details", {
+      eventId: event.id,
+      eventTitle: event.title,
+      dy,
+      roundedMinuteDiff,
+      directPosition,
+      originalTop: top,
+      previewOffset,
+      finalPreviewTop: directPosition - previewOffset,
+      distanceToEvent: Math.abs(directPosition - previewOffset - (top + dy)),
+      originalDay: event.start.getDate(),
+      newDay: newStart.getDate(), // Debería ser igual que el original
+    });
 
     // Asegurarse de que la posición esté dentro de los límites visibles
     const maxHours = (timeRange?.end || 24) - (timeRange?.start || 0);
     const maxPosition = maxHours * HOUR_HEIGHT;
-    const finalPosition = Math.max(0, Math.min(exactPosition, maxPosition));
 
-    logger.debug("Calculando posición de previsualización", {
-      eventId: event.id,
-      eventTitle: event.title,
-      minuteDiff: roundedMinuteDiff,
-      exactMinuteDiff,
-      newStartTime: newStart.toLocaleTimeString(),
-      startHourDiff,
-      startMinutes,
-      totalMinutesFromRangeStart,
-      exactPosition,
-      finalPosition,
-      isUnavailable: unavailable,
-    });
+    const limitedPosition = Math.max(0, Math.min(directPosition, maxPosition));
 
-    return finalPosition;
+    return limitedPosition;
   };
 
   // Handler for event press
@@ -433,77 +475,17 @@ const Event: React.FC<EventProps> = ({
 
   const textColor = getContrastText(backgroundColor);
 
+  // Add logging for the preview configuration
+  useEffect(() => {
+    logger.debug("Preview configuration", {
+      previewOffset,
+      connectionLineWidth,
+      eventId: event.id,
+    });
+  }, [previewOffset, connectionLineWidth, event.id]);
+
   return (
     <>
-      {/* Indicador de destino cuando se arrastra el evento */}
-      {previewPosition !== null && (
-        <>
-          {/* Línea de conexión entre el evento original y la previsualización */}
-          <View
-            style={{
-              position: "absolute",
-              left: left + width / 2, // Centrado horizontalmente
-              top: Math.min(previewPosition - 30 + eventHeight, top), // Comenzar desde el punto más alto
-              width: 2,
-              height: Math.abs(top - (previewPosition - 30 + eventHeight)), // Calcular distancia exacta
-              backgroundColor: isTargetUnavailable
-                ? theme.errorColor || "#F44336"
-                : theme.connectionLineColor || backgroundColor,
-              opacity: 0.7,
-              zIndex: 4,
-            }}
-          />
-
-          <Animated.View
-            style={[
-              styles.previewContainer,
-              {
-                backgroundColor: isTargetUnavailable
-                  ? theme.errorColor || "rgba(244, 67, 54, 0.4)"
-                  : theme.dragMovePreviewColor || "rgba(33, 150, 243, 0.4)",
-                borderColor: isTargetUnavailable
-                  ? theme.errorColor || "#F44336"
-                  : backgroundColor,
-                width,
-                left,
-                // Usar posición exacta para mayor precisión, restando 30px para mostrar por encima
-                top: previewPosition - 30,
-                height: eventHeight,
-                opacity: 0.7,
-                zIndex: 5,
-              },
-            ]}
-          >
-            <View style={styles.previewContent}>
-              <Text
-                style={[
-                  styles.previewTitle,
-                  {
-                    fontSize: width < 70 ? 9 : 12,
-                    color: isTargetUnavailable ? "#FFFFFF" : "#333333",
-                  },
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {isTargetUnavailable ? "Hora no disponible" : event.title}
-              </Text>
-              {eventHeight >= 40 && width >= 60 && !isTargetUnavailable && (
-                <Text
-                  style={[
-                    styles.previewTime,
-                    { fontSize: width < 80 ? 8 : 10 },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {eventTimeText}
-                </Text>
-              )}
-            </View>
-          </Animated.View>
-        </>
-      )}
-
       {/* Evento principal */}
       <Animated.View
         onLayout={onLayout}
@@ -518,7 +500,7 @@ const Event: React.FC<EventProps> = ({
             borderLeftWidth: 3,
             borderLeftColor: backgroundColor,
             transform: [{ translateY: translateY }, { scale: scaleAnim }],
-            zIndex: isPressed || previewPosition !== null ? 20 : 10, // Aumentar z-index cuando está seleccionado o arrastrando
+            zIndex: isPressed || previewPosition !== null ? 50 : 10, // Aumentar z-index cuando está seleccionado o arrastrando pero menos que el preview
             opacity: previewPosition !== null ? 0.8 : width < 60 ? 0.9 : 1, // Más transparente durante el arrastre
             shadowOpacity: isPressed ? 0.4 : 0.2, // Más sombra cuando está seleccionado
           },
@@ -537,7 +519,8 @@ const Event: React.FC<EventProps> = ({
               styles.title,
               {
                 color: textColor,
-                fontSize: width < 70 ? 9 : 12, // Reducir tamaño de texto en eventos estrechos
+                fontSize: width < 50 ? 8 : width < 70 ? 9 : 12, // Ajuste dinámico del tamaño de fuente
+                fontWeight: width < 50 ? "500" : "600", // Reducir peso de fuente en eventos estrechos
               },
             ]}
             numberOfLines={1}
@@ -546,21 +529,109 @@ const Event: React.FC<EventProps> = ({
             {event.title}
           </Text>
 
-          {eventHeight >= 40 && width >= 60 && (
+          {/* Solo mostrar hora si hay suficiente espacio */}
+          {eventHeight >= 35 && width >= 45 && (
             <Text
               style={[
                 styles.time,
-                { color: textColor, fontSize: width < 80 ? 8 : 10 },
+                {
+                  color: textColor,
+                  fontSize: width < 50 ? 7 : width < 80 ? 8 : 10,
+                  opacity: width < 60 ? 0.7 : 0.8,
+                },
               ]}
               numberOfLines={1}
             >
-              {eventTimeText}
+              {formatTime(event.start, locale)}
             </Text>
           )}
         </TouchableOpacity>
 
         <View style={styles.resizeHandle} />
       </Animated.View>
+
+      {/* Indicador de destino cuando se arrastra el evento - rendered last for proper stacking */}
+      {previewPosition !== null && (
+        <>
+          {/* Línea de conexión entre el evento original y la previsualización */}
+          <View
+            style={{
+              position: "absolute",
+              left: left + width / 2, // Centrado horizontalmente
+              top: Math.min(
+                top + currentTranslateY,
+                previewPosition - previewOffset
+              ),
+              width: connectionLineWidth,
+              height: Math.max(
+                5,
+                Math.abs(
+                  top + currentTranslateY - (previewPosition - previewOffset)
+                )
+              ),
+              backgroundColor: isTargetUnavailable
+                ? theme.errorColor || "#F44336"
+                : theme.connectionLineColor || backgroundColor,
+              opacity: 0.7,
+              zIndex: 99,
+              elevation: 9, // Slightly lower than the preview but higher than regular events
+            }}
+          />
+
+          <Animated.View
+            style={[
+              styles.previewContainer,
+              {
+                backgroundColor: isTargetUnavailable
+                  ? theme.errorColor || "rgba(244, 67, 54, 0.4)"
+                  : theme.dragMovePreviewColor || "rgba(33, 150, 243, 0.4)",
+                borderColor: isTargetUnavailable
+                  ? theme.errorColor || "#F44336"
+                  : backgroundColor,
+                width,
+                left,
+                // Posición exacta: posición original + desplazamiento del drag - offset del preview
+                top: previewPosition - previewOffset,
+                height: eventHeight,
+                opacity: 0.7,
+                zIndex: 100,
+                elevation: 10,
+              },
+            ]}
+          >
+            <View style={styles.previewContent}>
+              <Text
+                style={[
+                  styles.previewTitle,
+                  {
+                    fontSize: width < 50 ? 8 : width < 70 ? 9 : 12,
+                    fontWeight: width < 50 ? "500" : "600",
+                    color: isTargetUnavailable ? "#FFFFFF" : "#333333",
+                  },
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {isTargetUnavailable ? "Hora no disponible" : event.title}
+              </Text>
+              {eventHeight >= 35 && width >= 45 && !isTargetUnavailable && (
+                <Text
+                  style={[
+                    styles.previewTime,
+                    {
+                      fontSize: width < 50 ? 7 : width < 80 ? 8 : 10,
+                      opacity: width < 60 ? 0.7 : 0.8,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {formatTime(event.start, locale)}
+                </Text>
+              )}
+            </View>
+          </Animated.View>
+        </>
+      )}
     </>
   );
 };
@@ -584,6 +655,7 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     margin: 1,
     pointerEvents: "none",
+    elevation: 10,
   },
   previewContent: {
     flex: 1,

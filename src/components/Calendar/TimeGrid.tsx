@@ -85,6 +85,24 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     minute: number;
   } | null>(null);
 
+  // Forzar recálculo de posiciones cuando hay cambios en los eventos
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Efecto para detectar cambios en eventos y forzar recálculo
+  useEffect(() => {
+    // Incrementar la key para forzar el recálculo de posiciones
+    setRefreshKey((prev) => prev + 1);
+    logger.debug("Events updated, forcing recalculation", {
+      eventCount: events.length,
+      refreshKey: refreshKey + 1,
+    });
+  }, [events]);
+
+  // Efecto para hacer debug del refreshKey
+  useEffect(() => {
+    logger.debug("Refresh triggered", { refreshKey });
+  }, [refreshKey]);
+
   // Generate hours based on time range
   const hours = useMemo(() => {
     const result = [];
@@ -201,37 +219,10 @@ const TimeGrid: React.FC<TimeGridProps> = ({
       );
     });
 
-    // Identificar grupos de eventos que se solapan
-    const overlapGroups: CalendarEvent[][] = [];
-    let currentGroup: CalendarEvent[] = [];
+    // Utilizamos el algoritmo de agrupación mejorado de utils
+    const overlapGroups = groupOverlappingEvents(sortedEvents);
 
-    sortedEvents.forEach((event) => {
-      // Si el grupo está vacío o el evento actual se solapa con alguno del grupo actual
-      if (
-        currentGroup.length === 0 ||
-        currentGroup.some(
-          (e) =>
-            (event.start < e.end && event.end > e.start) || // Solapamiento clásico
-            Math.abs(event.start.getTime() - e.end.getTime()) < 60000 || // Eventos que casi se tocan (menos de 1 minuto)
-            Math.abs(event.end.getTime() - e.start.getTime()) < 60000
-        )
-      ) {
-        currentGroup.push(event);
-      } else {
-        // Si no hay solapamiento, guardar el grupo actual y empezar uno nuevo
-        if (currentGroup.length > 0) {
-          overlapGroups.push([...currentGroup]);
-        }
-        currentGroup = [event];
-      }
-    });
-
-    // Añadir el último grupo si no está vacío
-    if (currentGroup.length > 0) {
-      overlapGroups.push(currentGroup);
-    }
-
-    // Calcular posición y ancho para cada evento usando un algoritmo más sofisticado
+    // Calcular posición y ancho para cada evento
     const positionedEvents: Array<
       CalendarEvent & { left: number; width: number }
     > = [];
@@ -261,78 +252,119 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           // Verificar colisiones entre eventos
           const eventA = group[i];
           const eventB = group[j];
-          collisionMatrix[i][j] =
-            (eventA.start < eventB.end && eventA.end > eventB.start) ||
-            Math.abs(eventA.start.getTime() - eventB.end.getTime()) < 60000 ||
-            Math.abs(eventA.end.getTime() - eventB.start.getTime()) < 60000;
+
+          // Un evento se solapa con otro si comparten algún intervalo de tiempo
+          collisionMatrix[i][j] = eventsOverlap(eventA, eventB);
         }
       }
 
-      // Paso 2: Asignar columnas a los eventos
+      // Paso 2: Asignar columnas a los eventos usando un algoritmo más eficiente
       const eventColumns: number[] = Array(group.length).fill(-1);
-      const columnsCount: number[] = []; // Número de columnas necesarias para cada evento
+      const maxColumnsPerEvent: number[] = Array(group.length).fill(1);
 
-      // Asignar columnas a cada evento
+      // Primero, asignar columnas basadas en colisiones
       for (let i = 0; i < group.length; i++) {
-        // Encontrar la primera columna disponible para este evento
+        // Obtener todas las columnas ya ocupadas por eventos que se solapan con este
+        const usedColumns = new Set<number>();
+        for (let j = 0; j < i; j++) {
+          if (collisionMatrix[i][j] && eventColumns[j] !== -1) {
+            usedColumns.add(eventColumns[j]);
+          }
+        }
+
+        // Encontrar la primera columna disponible
         let column = 0;
-        while (true) {
-          let columnAvailable = true;
-
-          // Verificar si esta columna ya tiene un evento que colisiona
-          for (let j = 0; j < i; j++) {
-            if (collisionMatrix[i][j] && eventColumns[j] === column) {
-              columnAvailable = false;
-              break;
-            }
-          }
-
-          if (columnAvailable) {
-            eventColumns[i] = column;
-            // Actualizar contador de columnas
-            while (columnsCount.length <= column) {
-              columnsCount.push(0);
-            }
-            columnsCount[column]++;
-            break;
-          }
-
+        while (usedColumns.has(column)) {
           column++;
         }
+
+        eventColumns[i] = column;
       }
 
-      // Número máximo de columnas necesarias
+      // Identificar el número máximo de columnas necesarias
       const maxColumn = Math.max(...eventColumns);
       const totalColumns = maxColumn + 1;
 
-      // Definir ancho y posición de cada evento
-      const totalWidth = columnWidth - 10; // Reservar margen
-      const eventWidth = Math.max(totalWidth / totalColumns, 50); // Ancho mínimo de 50px
+      // Log para debugging
+      logger.debug("Event columns assignment", {
+        groupSize: group.length,
+        maxColumn,
+        totalColumns,
+        eventColumns,
+        events: group.map((e) => e.title),
+        startTimes: group.map((e) => e.start.toLocaleTimeString()),
+        endTimes: group.map((e) => e.end.toLocaleTimeString()),
+      });
 
+      // Paso 3: Calcular ancho y posición para cada evento
+      // Definir márgenes y espaciado
+      const marginLeft = 2;
+      const marginRight = 2;
+      const marginBetween = 1; // Espacio reducido entre eventos
+
+      // Calcular ancho disponible para todos los eventos en esta columna
+      const availableWidth = columnWidth - (marginLeft + marginRight);
+
+      // Ancho base para cada columna
+      const columnBaseWidth = availableWidth / totalColumns;
+
+      // Determinar el ancho mínimo para cada evento
+      const minEventWidth = Math.min(35, columnBaseWidth); // Permitir eventos más estrechos cuando hay muchas columnas
+
+      // Log de debugging para dimensiones
+      logger.debug("Event layout calculations", {
+        availableWidth,
+        totalColumns,
+        columnBaseWidth,
+        groupSize: group.length,
+        minEventWidth,
+      });
+
+      // Asignar anchos y posiciones
       for (let i = 0; i < group.length; i++) {
-        const left = eventColumns[i] * eventWidth + 5; // 5px de margen izquierdo
-        // Calcular ancho real: si columnas adyacentes están vacías, expandir
-        let span = 1; // Por defecto ocupa 1 columna
+        // Calcular posición izquierda base
+        const leftPosition = marginLeft + eventColumns[i] * columnBaseWidth;
 
-        // Calcular cuántas columnas puede ocupar a la derecha
-        for (let j = eventColumns[i] + 1; j <= maxColumn; j++) {
-          let canExpand = true;
-          for (let k = 0; k < group.length; k++) {
-            if (k !== i && collisionMatrix[i][k] && eventColumns[k] === j) {
-              canExpand = false;
-              break;
-            }
+        // Establecer márgenes mínimos y máximos para mantener los eventos dentro de la columna
+        const startMargin = marginLeft + (eventColumns[i] === 0 ? 2 : 0);
+        const endMargin = marginRight + (eventColumns[i] === maxColumn ? 2 : 0);
+
+        // Calcular ancho disponible para este evento en su posición
+        const maxWidthAtPosition = columnWidth - leftPosition - endMargin;
+
+        // Calcular ancho base ajustado al número de columnas
+        const baseWidth = Math.max(
+          columnBaseWidth - marginBetween,
+          minEventWidth
+        );
+
+        // Asegurar que el ancho no exceda el espacio disponible
+        const constrainedWidth = Math.min(baseWidth, maxWidthAtPosition);
+
+        // Mantener un ancho mínimo legible
+        const width = Math.max(constrainedWidth, minEventWidth);
+
+        // Ajustar la posición izquierda para asegurarnos de que no se sale de la columna
+        const maxLeftPosition = columnWidth - width - endMargin;
+        const adjustedLeft = Math.min(leftPosition, maxLeftPosition);
+
+        // Si el evento está en la última columna o es muy estrecho, darle un poco más de espacio
+        let finalWidth = width;
+        if (
+          (width < 40 && totalColumns <= 3) ||
+          eventColumns[i] === maxColumn
+        ) {
+          // Intentar expandir un poco los eventos pequeños, sin exceder límites
+          const expandedWidth = width * 1.1;
+          if (adjustedLeft + expandedWidth <= columnWidth - endMargin) {
+            finalWidth = expandedWidth;
           }
-          if (canExpand) span++;
-          else break;
         }
-
-        const width = Math.min(eventWidth * span - 5, columnWidth - left - 5);
 
         positionedEvents.push({
           ...group[i],
-          left,
-          width,
+          left: adjustedLeft,
+          width: finalWidth,
         });
       }
     });
@@ -344,6 +376,8 @@ const TimeGrid: React.FC<TimeGridProps> = ({
         title: e.title,
         left: e.left,
         width: e.width,
+        start: e.start.toLocaleTimeString(),
+        end: e.end.toLocaleTimeString(),
       })),
     });
 
@@ -360,6 +394,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     logger.debug(`Rendering events for day ${dayIndex}`, {
       date: date.toISOString(),
       eventCount: allEvents.length,
+      refreshKey,
       events: allEvents.map((e) => ({
         id: e.id,
         title: e.title,
@@ -375,6 +410,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
     logger.debug(`Positioned events for day ${dayIndex}`, {
       count: positionedEvents.length,
+      refreshKey,
       positioned: positionedEvents.map((e) => ({
         id: e.id,
         title: e.title,
@@ -402,15 +438,18 @@ const TimeGrid: React.FC<TimeGridProps> = ({
             endMinute: item.end.getMinutes(),
             top,
             height,
+            left: item.left,
+            width: item.width,
             hourHeight: HOUR_HEIGHT * zoomLevel,
             rangeStart: timeRange.start,
             rangeEnd: timeRange.end,
             zoomLevel,
+            refreshKey,
           });
 
           return (
             <Event
-              key={item.id}
+              key={`${item.id}-${refreshKey}`}
               event={item}
               top={top}
               left={item.left}
