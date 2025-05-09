@@ -413,6 +413,7 @@ const AppContent = () => {
     weekendColor: "#F9F9F9",
     eventTextColor: "#FFFFFF",
     dragCreateIndicatorColor: "rgba(33, 150, 243, 0.3)",
+    dragMovePreviewColor: "rgba(33, 150, 243, 0.4)",
     overlapIndicatorColor: "rgba(244, 67, 54, 0.1)",
     successColor: "#4CAF50",
     errorColor: "#F44336",

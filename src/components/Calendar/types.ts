@@ -4,6 +4,8 @@ export type CalendarEvent = {
   start: Date;
   end: Date;
   isAllDay?: boolean;
+  location?: string;
+  description?: string;
   color?: string;
   recurrence?: RecurrenceRule;
   metadata?: Record<string, any>;
@@ -43,6 +45,7 @@ export type CalendarTheme = {
   weekendColor: string;
   eventTextColor: string;
   dragCreateIndicatorColor: string;
+  dragMovePreviewColor: string;
   overlapIndicatorColor: string;
   successColor: string;
   errorColor: string;

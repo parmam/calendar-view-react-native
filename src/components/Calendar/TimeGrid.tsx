@@ -37,9 +37,14 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 interface TimeGridProps {
   viewType: CalendarViewType;
   panHandlers?: GestureResponderHandlers;
+  onEventDrag?: (event: CalendarEvent, minuteDiff: number) => boolean;
 }
 
-const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
+const TimeGrid: React.FC<TimeGridProps> = ({
+  viewType,
+  panHandlers,
+  onEventDrag,
+}) => {
   // Initialize logger
   const logger = useLogger("TimeGrid");
 
@@ -69,6 +74,13 @@ const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
     currentY: number;
     dayIndex: number;
     isCreating: boolean;
+  } | null>(null);
+
+  // Estado para rastrear la zona de destino durante el arrastre
+  const [dragTarget, setDragTarget] = useState<{
+    dayIndex: number;
+    hour: number;
+    minute: number;
   } | null>(null);
 
   // Generate hours based on time range
@@ -612,6 +624,26 @@ const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
     })
     .simultaneousWithExternalGesture(); // Allow scrolling while panning without specifying Gesture.Scroll
 
+  // Función para resaltar la zona de destino durante el arrastre
+  const highlightDropZone = (
+    dayIndex: number,
+    hour: number,
+    minute: number
+  ) => {
+    if (isResizingEvent) {
+      setDragTarget({ dayIndex, hour, minute });
+    } else {
+      setDragTarget(null);
+    }
+  };
+
+  // Limpiar la zona de destino cuando se suelta el evento
+  useEffect(() => {
+    if (!isResizingEvent) {
+      setDragTarget(null);
+    }
+  }, [isResizingEvent]);
+
   // Render time labels (left column)
   const renderTimeLabels = () => (
     <View
@@ -773,10 +805,18 @@ const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
               // Check if time slot is unavailable
               const isUnavailable = isTimeSlotUnavailable(date, hour, minute);
 
+              // Check if this slot is the current drag target
+              const isCurrentDragTarget =
+                dragTarget !== null &&
+                dragTarget.dayIndex === dayIndex &&
+                dragTarget.hour === hour &&
+                dragTarget.minute === minute;
+
               return (
                 <TouchableWithoutFeedback
                   key={`slot-${slotIndex}-day-${dayIndex}`}
                   onPress={() => handleTimeSlotPress(dayIndex, hour, minute)}
+                  onPressIn={() => highlightDropZone(dayIndex, hour, minute)}
                   disabled={isUnavailable}
                 >
                   <View
@@ -788,6 +828,14 @@ const TimeGrid: React.FC<TimeGridProps> = ({ viewType, panHandlers }) => {
                       },
                       isUnavailable && {
                         backgroundColor: theme.unavailableHoursColor,
+                      },
+                      isCurrentDragTarget && {
+                        backgroundColor:
+                          theme.dragMovePreviewColor ||
+                          "rgba(33, 150, 243, 0.15)",
+                        borderWidth: 1,
+                        borderColor: theme.primaryColor,
+                        borderStyle: "dashed",
                       },
                     ]}
                   />

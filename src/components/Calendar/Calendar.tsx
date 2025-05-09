@@ -78,6 +78,7 @@ const CalendarContent: React.FC = () => {
     unavailableHours,
     hapticOptions,
     onEventCreate,
+    onEventUpdate,
     setViewType,
     setSelectedDate,
     setZoomLevel,
@@ -305,6 +306,41 @@ const CalendarContent: React.FC = () => {
     },
   });
 
+  // Handle dragging events
+  const handleEventDrag = useCallback(
+    (event: CalendarEvent, minuteDiff: number): boolean => {
+      // Calcular nuevas fechas
+      const newStart = new Date(event.start);
+      newStart.setMinutes(newStart.getMinutes() + minuteDiff);
+
+      const newEnd = new Date(event.end);
+      newEnd.setMinutes(newEnd.getMinutes() + minuteDiff);
+
+      // Verificar si el destino es válido
+      if (unavailableHours) {
+        // Obtener día de la semana
+        const dayOfWeek = newStart.getDay();
+
+        // Verificar si este día está incluido en días no disponibles
+        const daysToCheck = unavailableHours.days || [0, 1, 2, 3, 4, 5, 6];
+        if (daysToCheck.includes(dayOfWeek)) {
+          // Verificar si la hora cae dentro de algún rango no disponible
+          const timeValue = newStart.getHours() + newStart.getMinutes() / 60;
+          const isUnavailable = unavailableHours.ranges.some(
+            (range) => timeValue >= range.start && timeValue < range.end
+          );
+
+          if (isUnavailable) {
+            return false; // No permitir arrastrar a esta zona
+          }
+        }
+      }
+
+      return true; // Permitir arrastrar
+    },
+    [unavailableHours]
+  );
+
   const renderContent = () => {
     switch (viewType) {
       case "day":
@@ -317,6 +353,7 @@ const CalendarContent: React.FC = () => {
             <TimeGrid
               viewType={viewType}
               panHandlers={isDragEnabled ? panResponder.panHandlers : undefined}
+              onEventDrag={handleEventDrag}
             />
           </>
         );
@@ -327,6 +364,7 @@ const CalendarContent: React.FC = () => {
           <TimeGrid
             viewType={viewType}
             panHandlers={isDragEnabled ? panResponder.panHandlers : undefined}
+            onEventDrag={handleEventDrag}
           />
         );
     }
