@@ -18,6 +18,7 @@ import {
   getWeekDates,
   filterEventsByDay,
   getEventPosition,
+  getEventPositionExact,
   timeToDate,
   isToday,
   getDayName,
@@ -34,34 +35,6 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 const HOUR_HEIGHT = 60; // Esta altura debe ser consistente en todo el componente
 const TIME_LABEL_WIDTH = 50;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
-// Función mejorada para calcular posición exacta de eventos
-const getEventPositionExact = (
-  event: CalendarEvent,
-  rangeStartHour: number,
-  rangeEndHour: number,
-  hourHeight: number
-): { top: number; height: number } => {
-  // 1. Calcular minutos totales desde el inicio del rango para la hora de inicio
-  const startHourDiff = event.start.getHours() - rangeStartHour;
-  const startMinutes = event.start.getMinutes();
-  const startTotalMinutes = startHourDiff * 60 + startMinutes;
-  const startPosition = (startTotalMinutes * hourHeight) / 60;
-
-  // 2. Calcular minutos totales desde el inicio del rango para la hora de fin
-  const endHourDiff = event.end.getHours() - rangeStartHour;
-  const endMinutes = event.end.getMinutes();
-  const endTotalMinutes = endHourDiff * 60 + endMinutes;
-  const endPosition = (endTotalMinutes * hourHeight) / 60;
-
-  // 3. Calcular altura basada en la diferencia de posiciones
-  const height = Math.max(endPosition - startPosition, 15); // Altura mínima de 15px
-
-  return {
-    top: startPosition,
-    height,
-  };
-};
 
 interface TimeGridProps {
   viewType: CalendarViewType;
@@ -412,53 +385,37 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
     return (
       <>
-        {positionedEvents.map((event) => {
-          // Calcular posición y dimensiones basadas en el tiempo usando la nueva función
+        {positionedEvents.map((item) => {
+          // Usar la función de posición exacta para mayor precisión
           const { top, height } = getEventPositionExact(
-            event,
+            item,
             timeRange.start,
             timeRange.end,
             HOUR_HEIGHT * zoomLevel
           );
 
-          logger.debug(`Event position for ${event.id}`, {
-            title: event.title,
+          logger.debug(`Event position for ${item.id}`, {
+            title: item.title,
+            startHour: item.start.getHours(),
+            startMinute: item.start.getMinutes(),
+            endHour: item.end.getHours(),
+            endMinute: item.end.getMinutes(),
             top,
             height,
-            startHour: event.start.getHours(),
-            startMinute: event.start.getMinutes(),
-            endHour: event.end.getHours(),
-            endMinute: event.end.getMinutes(),
+            hourHeight: HOUR_HEIGHT * zoomLevel,
             rangeStart: timeRange.start,
             rangeEnd: timeRange.end,
-            hourHeight: HOUR_HEIGHT,
             zoomLevel,
           });
 
-          // Omitir eventos fuera del área visible
-          if (
-            top < -100 || // Dar un poco de margen superior
-            top >
-              HOUR_HEIGHT * zoomLevel * (timeRange.end - timeRange.start) + 100 // Margen inferior
-          ) {
-            logger.debug(`Skipping event ${event.id} - outside visible area`, {
-              top,
-              height,
-            });
-            return null;
-          }
-
-          // Asegurar una altura mínima para los eventos
-          const effectiveHeight = Math.max(height, 25);
-
           return (
             <Event
-              key={event.id}
-              event={event}
-              width={event.width}
-              left={event.left}
+              key={item.id}
+              event={item}
               top={top}
-              height={effectiveHeight}
+              left={item.left}
+              width={item.width}
+              height={height}
               isResizing={isResizingEvent}
               setIsResizing={setIsResizingEvent}
             />

@@ -195,20 +195,14 @@ const Event: React.FC<EventProps> = ({
         // Update position
         translateY.setValue(gestureState.dy);
 
-        // Calcular tiempo en minutos equivalente al desplazamiento
-        const hourDuration = Math.max(
-          1,
-          event.end.getHours() -
-            event.start.getHours() +
-            (event.end.getMinutes() - event.start.getMinutes()) / 60
-        );
+        // Calcular tiempo en minutos equivalente al desplazamiento con alta precisión
+        const pixelsPerMinute = HOUR_HEIGHT / 60; // 1 pixel por minuto si HOUR_HEIGHT es 60
 
-        // Calcular pixeles por minuto basado en la altura del evento y su duración en minutos
-        const totalMinutes = hourDuration * 60;
-        const pixelsPerMinute = HOUR_HEIGHT / 60; // Usar una constante estable
+        // Usar el valor exacto de dy sin redondeo para cálculos de posición interna
+        const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
 
-        // Calcular diferencia en minutos y redondear al minuto más cercano
-        const minuteDiff = Math.round(gestureState.dy / pixelsPerMinute);
+        // Para UI y cálculos de tiempo, redondear al minuto más cercano
+        const minuteDiff = Math.round(exactMinuteDiff);
 
         // Mostrar previsualización si hay cualquier movimiento
         if (Math.abs(gestureState.dy) > 5) {
@@ -217,11 +211,15 @@ const Event: React.FC<EventProps> = ({
             dy: gestureState.dy,
             pixelsPerMinute,
             minuteDiff,
+            exactMinuteDiff,
             eventTitle: event.title,
           });
 
-          // Calcular nueva posición de previsualización
-          const newPreviewPosition = calculatePreviewPosition(minuteDiff);
+          // Calcular nueva posición de previsualización usando el valor exacto
+          const newPreviewPosition = calculatePreviewPosition(
+            exactMinuteDiff,
+            minuteDiff
+          );
           setPreviewPosition(newPreviewPosition);
         } else {
           setPreviewPosition(null);
@@ -338,24 +336,29 @@ const Event: React.FC<EventProps> = ({
   ).current;
 
   // Calcular la posición temporal al arrastrar
-  const calculatePreviewPosition = (minuteDiff: number): number => {
+  const calculatePreviewPosition = (
+    exactMinuteDiff: number,
+    roundedMinuteDiff: number
+  ): number => {
     // Crear una copia de la fecha de inicio original
     const newStart = new Date(event.start);
-    // Añadir los minutos de diferencia
-    newStart.setMinutes(newStart.getMinutes() + minuteDiff);
+    // Añadir los minutos de diferencia redondeados para la nueva hora de inicio mostrada
+    newStart.setMinutes(newStart.getMinutes() + roundedMinuteDiff);
 
     // Verificar si la nueva posición está en un rango no disponible
     const unavailable = isTimeSlotUnavailable(newStart);
     setIsTargetUnavailable(unavailable);
 
-    // Calcular la posición exacta usando el mismo algoritmo que TimeGrid.getEventPosition
-    // Primero, calcular la distancia desde la primera hora visible
+    // Calcular la posición exacta usando valores sin redondear para mayor precisión
     const rangeStartHour = timeRange?.start || 0;
 
-    // Calcular el desplazamiento desde el inicio del rango de tiempo en minutos
-    const startHourDiff = newStart.getHours() - rangeStartHour;
-    const startMinutes = newStart.getMinutes();
-    const totalMinutesFromRangeStart = startHourDiff * 60 + startMinutes;
+    // Calcular el desplazamiento desde el inicio del rango de tiempo
+    const startHourDiff = event.start.getHours() - rangeStartHour;
+    const startMinutes = event.start.getMinutes();
+
+    // Usar el valor exacto de minuteDiff para el cálculo de posición
+    const totalMinutesFromRangeStart =
+      startHourDiff * 60 + startMinutes + exactMinuteDiff;
 
     // Convertir minutos a píxeles usando la constante HOUR_HEIGHT
     const exactPosition = (totalMinutesFromRangeStart * HOUR_HEIGHT) / 60;
@@ -368,7 +371,8 @@ const Event: React.FC<EventProps> = ({
     logger.debug("Calculando posición de previsualización", {
       eventId: event.id,
       eventTitle: event.title,
-      minuteDiff,
+      minuteDiff: roundedMinuteDiff,
+      exactMinuteDiff,
       newStartTime: newStart.toLocaleTimeString(),
       startHourDiff,
       startMinutes,
@@ -462,7 +466,8 @@ const Event: React.FC<EventProps> = ({
                   : backgroundColor,
                 width,
                 left,
-                top: previewPosition - 30, // Posicionar 30px por encima de la posición calculada
+                // Usar posición exacta para mayor precisión, restando 30px para mostrar por encima
+                top: previewPosition - 30,
                 height: eventHeight,
                 opacity: 0.7,
                 zIndex: 5,
