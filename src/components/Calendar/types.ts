@@ -80,6 +80,13 @@ export type CalendarConfig = {
   dragPreviewConfig: DragPreviewConfig;
 };
 
+export interface TimeChangeConfirmation {
+  visible: boolean;
+  event: CalendarEvent | null;
+  newStart: Date | null;
+  newEnd: Date | null;
+}
+
 export type CalendarContextType = {
   events: CalendarEvent[];
   viewType: CalendarViewType;
@@ -96,6 +103,7 @@ export type CalendarContextType = {
   calendarConfig: CalendarConfig;
   zoomLevel: number;
   isDragEnabled: boolean;
+  timeChangeConfirmation: TimeChangeConfirmation;
   onEventPress?: (event: CalendarEvent) => void;
   onTimeSlotPress?: (start: Date, end: Date) => void;
   onEventCreate?: (event: CalendarEvent) => void;
@@ -108,4 +116,17 @@ export type CalendarContextType = {
   setSelectedDate: (date: Date) => void;
   setZoomLevel: (level: number) => void;
   setIsDragEnabled: (enabled: boolean) => void;
+  showTimeChangeConfirmation: (
+    event: CalendarEvent,
+    newStart: Date,
+    newEnd: Date
+  ) => void;
+  hideTimeChangeConfirmation: () => void;
+  confirmTimeChange: () => void;
 };
+
+export interface SnapLineIndicator {
+  time: Date;
+  visible: boolean;
+  color: string;
+}

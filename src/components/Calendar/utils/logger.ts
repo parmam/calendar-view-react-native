@@ -1,4 +1,51 @@
+/**
+ * Sistema de logging para el calendario
+ *
+ * Este módulo proporciona utilidades para registrar información, advertencias y errores
+ * durante la ejecución del calendario. El logging puede habilitarse o deshabilitarse
+ * globalmente mediante la configuración PERFORMANCE_CONFIG.
+ *
+ * EJEMPLOS DE USO:
+ *
+ * 1. Para deshabilitar completamente el logging (recomendado para producción):
+ *
+ *    // A nivel de aplicación
+ *    import { useCalendarConfig } from 'path/to/calendar/config';
+ *
+ *    const { updatePerformanceConfig } = useCalendarConfig();
+ *    updatePerformanceConfig({ LOGGING_ENABLED: false });
+ *
+ *    // O directamente
+ *    import { configManager } from 'path/to/calendar/config';
+ *
+ *    configManager.updatePerformanceConfig({ LOGGING_ENABLED: false });
+ *
+ * 2. Para cambiar el nivel de logging (mostrar solo errores):
+ *
+ *    import { useCalendarConfig } from 'path/to/calendar/config';
+ *
+ *    const { updatePerformanceConfig } = useCalendarConfig();
+ *    updatePerformanceConfig({ LOGGING_LEVEL: "error" });
+ *
+ * 3. Para usar el logger en un componente:
+ *
+ *    import { useLogger } from 'path/to/calendar/utils/logger';
+ *
+ *    function MyComponent() {
+ *      const logger = useLogger("MyComponent");
+ *
+ *      // Diferentes niveles de log
+ *      logger.debug("Información detallada para depuración");
+ *      logger.info("Información general");
+ *      logger.warn("Advertencia");
+ *      logger.error("Error crítico", { detalles: "..." });
+ *
+ *      // ...
+ *    }
+ */
+
 import { useState, useCallback, useEffect, useRef } from "react";
+import { PERFORMANCE_CONFIG } from "../config/calendarConfig";
 
 // Log levels
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -12,8 +59,8 @@ export interface LoggerConfig {
 
 // Default configuration
 const DEFAULT_CONFIG: LoggerConfig = {
-  enabled: __DEV__, // Only enable in development by default
-  minLevel: "debug",
+  enabled: PERFORMANCE_CONFIG.LOGGING_ENABLED, // Use the configuration from PERFORMANCE_CONFIG
+  minLevel: PERFORMANCE_CONFIG.LOGGING_LEVEL as LogLevel, // Use the log level from PERFORMANCE_CONFIG
   prefix: "[Calendar]",
 };
 
@@ -109,6 +156,20 @@ class Logger {
 
 // Create a singleton instance
 export const logger = new Logger();
+
+/**
+ * Actualiza la configuración del logger basada en los cambios de PERFORMANCE_CONFIG
+ *
+ * Esta función debe ser llamada cuando se actualizan las configuraciones
+ * de rendimiento para asegurar que los cambios en la configuración de logging
+ * se reflejen en el comportamiento del logger.
+ */
+export const updateLoggerFromConfig = () => {
+  logger.configure({
+    enabled: PERFORMANCE_CONFIG.LOGGING_ENABLED,
+    minLevel: PERFORMANCE_CONFIG.LOGGING_LEVEL as LogLevel,
+  });
+};
 
 // React hook for using the logger in components
 export const useLogger = (componentName?: string): Logger => {

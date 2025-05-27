@@ -13,9 +13,7 @@ import { useCalendar } from "./CalendarContext";
 import { formatTime, getEventPosition } from "./utils";
 import { CalendarEvent } from "./types";
 import { useLogger } from "./utils/logger";
-
-// Constante para la altura de la hora
-const HOUR_HEIGHT = 60;
+import { useLayoutConfig } from "./config";
 
 interface EventProps {
   event: CalendarEvent;
@@ -25,6 +23,12 @@ interface EventProps {
   height: number;
   isResizing: boolean;
   setIsResizing: (isResizing: boolean) => void;
+  onEventDragWithSnap?: (
+    event: CalendarEvent,
+    minuteDiff: number,
+    snapTime: Date
+  ) => boolean;
+  onEventDragEnd?: () => void;
 }
 
 const Event: React.FC<EventProps> = ({
@@ -35,9 +39,15 @@ const Event: React.FC<EventProps> = ({
   height,
   isResizing,
   setIsResizing,
+  onEventDragWithSnap,
+  onEventDragEnd,
 }) => {
   // Initialize logger
   const logger = useLogger("Event");
+
+  // Obtener configuración de layout
+  const { layoutConfig } = useLayoutConfig();
+  const HOUR_HEIGHT = layoutConfig.HOUR_HEIGHT;
 
   // Log event details for debugging
   useEffect(() => {
@@ -61,6 +71,8 @@ const Event: React.FC<EventProps> = ({
     timeRange,
     unavailableHours,
     calendarConfig,
+    timeInterval,
+    showTimeChangeConfirmation,
   } = useCalendar();
   const [eventHeight, setEventHeight] = useState(height);
   const [isPressed, setIsPressed] = useState(false);
@@ -221,8 +233,32 @@ const Event: React.FC<EventProps> = ({
         // Usar el valor exacto de dy sin redondeo para cálculos de posición
         const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
 
-        // Para UI y cálculos de tiempo, redondear al minuto más cercano
-        const minuteDiff = Math.round(exactMinuteDiff);
+        // Snap to precise timeInterval grid
+        // First get total minutes from start of day for the original event
+        const originalMinutesFromMidnight =
+          event.start.getHours() * 60 + event.start.getMinutes();
+
+        // Calculate new raw minutes
+        const newMinutesFromMidnight =
+          originalMinutesFromMidnight + exactMinuteDiff;
+
+        // Snap to nearest timeInterval grid point
+        const snappedMinutesFromMidnight =
+          Math.round(newMinutesFromMidnight / timeInterval) * timeInterval;
+
+        // Calculate the final minute difference that maintains the timeInterval grid
+        const minuteDiff =
+          snappedMinutesFromMidnight - originalMinutesFromMidnight;
+
+        // Create a new date object for the snap time
+        const snapTime = new Date(event.start);
+        // Reset minutes completely and then add the snapped minutes
+        snapTime.setHours(
+          Math.floor(snappedMinutesFromMidnight / 60),
+          snappedMinutesFromMidnight % 60,
+          0,
+          0
+        );
 
         // Mostrar previsualización si hay cualquier movimiento significativo
         if (Math.abs(gestureState.dy) > 1) {
@@ -232,24 +268,31 @@ const Event: React.FC<EventProps> = ({
             minuteDiff
           );
 
+          // Call the parent event drag handler with the snap time
+          if (onEventUpdate) {
+            // This will only validate if dragging is allowed and update the snap line
+            const isValid = validateEventDrag(event, minuteDiff, snapTime);
+            setIsTargetUnavailable(!isValid);
+          }
+
           // Registrar información detallada para depuración
           logger.debug("Movimiento durante arrastre", {
             eventId: event.id,
             eventTitle: event.title,
             dy: gestureState.dy,
-            dx: gestureState.dx, // Logging horizontal movement, but not using it
-            pixel_to_minute_ratio: pixelsPerMinute,
-            minuteDiff,
             exactMinuteDiff,
+            originalMinutesFromMidnight,
+            newMinutesFromMidnight,
+            snappedMinutesFromMidnight,
+            minuteDiff,
+            snapTimeHour: snapTime.getHours(),
+            snapTimeMinute: snapTime.getMinutes(),
+            snapTime: snapTime.toLocaleTimeString(),
+            timeInterval,
             top,
             previewOffset,
             currentTranslateY,
             newPreviewPosition,
-            previewFinalTop: newPreviewPosition - previewOffset,
-            draggedEventCurrentTop: top + currentTranslateY,
-            distanceBetweenEventAndPreview: Math.abs(
-              newPreviewPosition - previewOffset - (top + currentTranslateY)
-            ),
           });
 
           setPreviewPosition(newPreviewPosition);
@@ -270,18 +313,55 @@ const Event: React.FC<EventProps> = ({
         setIsTargetUnavailable(false);
 
         // Handle the event update
-        if (Math.abs(gestureState.dy) > 10 && onEventUpdate) {
-          // Calcular minutos de diferencia basados en una constante estable de píxeles por minuto
+        if (Math.abs(gestureState.dy) > 10) {
+          // Calculate minutes using the same grid-snapping logic as in onPanResponderMove
           const pixelsPerMinute = HOUR_HEIGHT / 60;
-          const minuteDiff = Math.round(gestureState.dy / pixelsPerMinute);
+          const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
+
+          // Get original minutes from midnight
+          const originalMinutesFromMidnight =
+            event.start.getHours() * 60 + event.start.getMinutes();
+
+          // Calculate new total minutes
+          const newMinutesFromMidnight =
+            originalMinutesFromMidnight + exactMinuteDiff;
+
+          // Snap to nearest timeInterval grid point
+          const snappedMinutesFromMidnight =
+            Math.round(newMinutesFromMidnight / timeInterval) * timeInterval;
+
+          // Calculate the final minute difference that maintains the timeInterval grid
+          const minuteDiff =
+            snappedMinutesFromMidnight - originalMinutesFromMidnight;
 
           if (minuteDiff !== 0) {
             // Create new date objects to avoid modifying the original
             const newStart = new Date(event.start);
-            newStart.setMinutes(newStart.getMinutes() + minuteDiff);
-
             const newEnd = new Date(event.end);
-            newEnd.setMinutes(newEnd.getMinutes() + minuteDiff);
+
+            // Calculate duration in minutes
+            const durationMinutes =
+              event.end.getHours() * 60 +
+              event.end.getMinutes() -
+              (event.start.getHours() * 60 + event.start.getMinutes());
+
+            // Set the start time to the snapped time
+            newStart.setHours(
+              Math.floor(snappedMinutesFromMidnight / 60),
+              snappedMinutesFromMidnight % 60,
+              0,
+              0
+            );
+
+            // Set the end time based on the original duration
+            const endMinutesFromMidnight =
+              snappedMinutesFromMidnight + durationMinutes;
+            newEnd.setHours(
+              Math.floor(endMinutesFromMidnight / 60),
+              endMinutesFromMidnight % 60,
+              0,
+              0
+            );
 
             // Ensure the day is preserved (only change time)
             newStart.setFullYear(event.start.getFullYear());
@@ -303,6 +383,9 @@ const Event: React.FC<EventProps> = ({
               newEnd: newEnd.toLocaleTimeString(),
               eventTitle: event.title,
               leftPosition: left, // Aseguramos que mantenemos la misma posición left
+              originalMinutesFromMidnight,
+              snappedMinutesFromMidnight,
+              timeInterval,
             });
 
             // Verificar si la nueva posición está en un rango no disponible
@@ -342,21 +425,16 @@ const Event: React.FC<EventProps> = ({
                 }
               );
             } else {
-              logger.debug("Evento reubicado exitosamente", {
+              logger.debug("Mostrando confirmación de cambio de horario", {
                 eventId: event.id,
                 minuteDiff,
                 newStart: newStart.toLocaleTimeString(),
                 newEnd: newEnd.toLocaleTimeString(),
                 eventTitle: event.title,
-                leftPosition: left, // Mantenemos la misma posición left
               });
 
-              // Update event - manteniendo su propiedad left y width originales para evitar cambios de columna
-              onEventUpdate({
-                ...event,
-                start: newStart,
-                end: newEnd,
-              });
+              // Instead of directly updating the event, show confirmation modal
+              showTimeChangeConfirmation(event, newStart, newEnd);
             }
           } else {
             logger.debug("Arrastre de evento sin cambio de posición", {
@@ -377,6 +455,11 @@ const Event: React.FC<EventProps> = ({
         // Reset translation
         translateY.setValue(0);
         setIsResizing(false);
+
+        // Call the drag end handler if provided
+        if (onEventDragEnd) {
+          onEventDragEnd();
+        }
       },
     })
   ).current;
@@ -483,6 +566,24 @@ const Event: React.FC<EventProps> = ({
       eventId: event.id,
     });
   }, [previewOffset, connectionLineWidth, event.id]);
+
+  // Modify the validateEventDrag function to use the onEventDragWithSnap prop
+  const validateEventDrag = (
+    event: CalendarEvent,
+    minuteDiff: number,
+    snapTime: Date
+  ): boolean => {
+    // Use the onEventDragWithSnap prop if provided
+    if (onEventDragWithSnap) {
+      try {
+        return onEventDragWithSnap(event, minuteDiff, snapTime);
+      } catch (error) {
+        logger.debug("Error validating event drag", { error });
+        return false;
+      }
+    }
+    return true;
+  };
 
   return (
     <>

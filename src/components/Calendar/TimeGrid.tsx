@@ -28,27 +28,44 @@ import {
 import { useScrollHandler } from "./utils/ScrollHandler";
 import { useLogger } from "./utils/logger";
 import Event from "./Event";
-import { CalendarEvent, CalendarViewType } from "./types";
+import { CalendarEvent, CalendarViewType, SnapLineIndicator } from "./types";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useLayoutConfig, useOverlapConfig } from "./config";
 
 // Definir constantes de cuadrícula
-const HOUR_HEIGHT = 60; // Esta altura debe ser consistente en todo el componente
-const TIME_LABEL_WIDTH = 50;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface TimeGridProps {
   viewType: CalendarViewType;
   panHandlers?: GestureResponderHandlers;
-  onEventDrag?: (event: CalendarEvent, minuteDiff: number) => boolean;
+  onEventDrag?: (
+    event: CalendarEvent,
+    minuteDiff: number,
+    snapTime?: Date
+  ) => boolean;
+  onDragEnd?: () => void;
+  snapLineIndicator?: SnapLineIndicator | null;
+  timeInterval?: number;
 }
 
 const TimeGrid: React.FC<TimeGridProps> = ({
   viewType,
   panHandlers,
   onEventDrag,
+  onDragEnd,
+  snapLineIndicator,
+  timeInterval: propTimeInterval,
 }) => {
   // Initialize logger
   const logger = useLogger("TimeGrid");
+
+  // Obtener configuraciones de layout y overlap
+  const { layoutConfig } = useLayoutConfig();
+  const { overlapConfig } = useOverlapConfig();
+
+  // Usar valores de la configuración
+  const HOUR_HEIGHT = layoutConfig.HOUR_HEIGHT;
+  const TIME_LABEL_WIDTH = layoutConfig.TIME_LABEL_WIDTH;
 
   // Initialize scroll handler hook
   const { scrollPosition, scrollTo, scrollProps } = useScrollHandler();
@@ -61,13 +78,16 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     locale,
     firstDayOfWeek,
     visibleDays,
-    timeInterval,
     onTimeSlotPress,
     onEventCreate,
     onEventPress,
     zoomLevel,
     unavailableHours,
+    timeInterval: contextTimeInterval,
   } = useCalendar();
+
+  // Use provided timeInterval or fall back to context value
+  const timeInterval = propTimeInterval || contextTimeInterval || 30;
 
   const [gridWidth, setGridWidth] = useState(SCREEN_WIDTH - TIME_LABEL_WIDTH);
   const [isResizingEvent, setIsResizingEvent] = useState(false);
@@ -283,7 +303,9 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
       // Identificar el número máximo de columnas necesarias
       const maxColumn = Math.max(...eventColumns);
-      const totalColumns = maxColumn + 1;
+      // Usar MAX_COLUMNS del overlapConfig para limitar el número de columnas
+      const maxAllowedColumns = overlapConfig.MAX_COLUMNS;
+      const totalColumns = Math.min(maxColumn + 1, maxAllowedColumns);
 
       // Log para debugging
       logger.debug("Event columns assignment", {
@@ -447,6 +469,26 @@ const TimeGrid: React.FC<TimeGridProps> = ({
             refreshKey,
           });
 
+          // Add a function to handle event drag with snap time
+          const handleEventDragWithSnap = (
+            event: CalendarEvent,
+            minuteDiff: number,
+            snapTime: Date
+          ): boolean => {
+            // Call the provided onEventDrag handler with the snap time
+            if (onEventDrag) {
+              return onEventDrag(event, minuteDiff, snapTime);
+            }
+            return true;
+          };
+
+          // Add a function to handle event drag end
+          const handleEventDragEnd = () => {
+            if (onDragEnd) {
+              onDragEnd();
+            }
+          };
+
           return (
             <Event
               key={`${item.id}-${refreshKey}`}
@@ -457,6 +499,8 @@ const TimeGrid: React.FC<TimeGridProps> = ({
               height={height}
               isResizing={isResizingEvent}
               setIsResizing={setIsResizingEvent}
+              onEventDragWithSnap={handleEventDragWithSnap}
+              onEventDragEnd={handleEventDragEnd}
             />
           );
         })}
@@ -553,16 +597,31 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     // Adjust for zoom level
     const adjustedY = y / zoomLevel;
 
-    // Calculate hour
-    const hourDecimal = adjustedY / HOUR_HEIGHT;
-    const hour = Math.floor(hourDecimal) + timeRange.start;
+    // Calculate total minutes from timeRange.start
+    const totalMinutesFromRangeStart = (adjustedY / HOUR_HEIGHT) * 60;
 
-    // Calculate minutes
-    const minuteDecimal = (hourDecimal - Math.floor(hourDecimal)) * 60;
-    let minutes = Math.floor(minuteDecimal);
+    // Calculate total minutes from midnight
+    const minutesFromMidnight =
+      timeRange.start * 60 + totalMinutesFromRangeStart;
 
-    // Snap to nearest timeInterval
-    minutes = Math.round(minutes / timeInterval) * timeInterval;
+    // Snap to the nearest timeInterval
+    const snappedMinutesFromMidnight =
+      Math.round(minutesFromMidnight / timeInterval) * timeInterval;
+
+    // Convert back to hours and minutes
+    const hour = Math.floor(snappedMinutesFromMidnight / 60);
+    const minutes = snappedMinutesFromMidnight % 60;
+
+    logger.debug("Time conversion from y-coordinate", {
+      y,
+      adjustedY,
+      totalMinutesFromRangeStart,
+      minutesFromMidnight,
+      snappedMinutesFromMidnight,
+      hour,
+      minutes,
+      timeInterval,
+    });
 
     return { hour, minutes };
   };
@@ -698,6 +757,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
       style={[
         styles.timeLabelsContainer,
         {
+          width: TIME_LABEL_WIDTH,
           borderRightColor: theme.gridLineColor,
           borderRightWidth: 1,
           borderLeftColor: theme.gridLineColor,
@@ -801,6 +861,36 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           </View>
         ))}
       </>
+    );
+  };
+
+  // Function to render the snap line indicator during drag
+  const renderSnapLineIndicator = () => {
+    if (!snapLineIndicator || !snapLineIndicator.visible) {
+      return null;
+    }
+
+    // Calculate position based on the time
+    const hours = snapLineIndicator.time.getHours();
+    const minutes = snapLineIndicator.time.getMinutes();
+
+    // Calculate position from time
+    let position = 0;
+    if (hours >= timeRange.start && hours <= timeRange.end) {
+      position = (hours - timeRange.start) * HOUR_HEIGHT * zoomLevel;
+      position += (minutes / 60) * HOUR_HEIGHT * zoomLevel;
+    }
+
+    return (
+      <View
+        style={[
+          styles.snapLineIndicator,
+          {
+            top: position,
+            borderColor: snapLineIndicator.color,
+          },
+        ]}
+      />
     );
   };
 
@@ -973,6 +1063,9 @@ const TimeGrid: React.FC<TimeGridProps> = ({
                   ]}
                 />
               )}
+
+              {/* Snap line indicator */}
+              {renderSnapLineIndicator()}
             </View>
           </View>
         </ScrollView>
@@ -1001,7 +1094,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   timeLabelsContainer: {
-    width: TIME_LABEL_WIDTH,
+    width: 50, // Valor por defecto, se sobreescribirá dinámicamente
   },
   timeLabel: {
     justifyContent: "center",
@@ -1065,6 +1158,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: "dashed",
     zIndex: 5,
+  },
+  snapLineIndicator: {
+    position: "absolute",
+    height: 2,
+    left: 0,
+    right: 0,
+    borderTopWidth: 2,
+    borderStyle: "solid",
+    zIndex: 20,
   },
 });
 

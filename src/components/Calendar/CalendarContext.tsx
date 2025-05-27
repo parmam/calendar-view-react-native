@@ -1,4 +1,10 @@
-import React, { createContext, useState, useContext, ReactNode } from "react";
+import React, {
+  createContext,
+  useState,
+  useContext,
+  ReactNode,
+  useCallback,
+} from "react";
 import {
   CalendarContextType,
   CalendarEvent,
@@ -9,6 +15,7 @@ import {
   HapticOptions,
   CalendarConfig,
   DragPreviewConfig,
+  TimeChangeConfirmation,
 } from "./types";
 
 // Default theme
@@ -67,6 +74,14 @@ export const defaultCalendarConfig: CalendarConfig = {
   },
 };
 
+// Default time change confirmation state
+const defaultTimeChangeConfirmation: TimeChangeConfirmation = {
+  visible: false,
+  event: null,
+  newStart: null,
+  newEnd: null,
+};
+
 // Create context with default values
 const CalendarContext = createContext<CalendarContextType>({
   events: [],
@@ -81,10 +96,14 @@ const CalendarContext = createContext<CalendarContextType>({
   calendarConfig: defaultCalendarConfig,
   zoomLevel: 1,
   isDragEnabled: true,
+  timeChangeConfirmation: defaultTimeChangeConfirmation,
   setViewType: () => {},
   setSelectedDate: () => {},
   setZoomLevel: () => {},
   setIsDragEnabled: () => {},
+  showTimeChangeConfirmation: () => {},
+  hideTimeChangeConfirmation: () => {},
+  confirmTimeChange: () => {},
 });
 
 interface CalendarProviderProps {
@@ -156,6 +175,10 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
   const [isDragEnabled, setInternalDragEnabled] =
     useState<boolean>(initialDragEnabled);
 
+  // Add state for time change confirmation
+  const [timeChangeConfirmation, setTimeChangeConfirmation] =
+    useState<TimeChangeConfirmation>(defaultTimeChangeConfirmation);
+
   // Use the provided setters or fallback to internal state
   const handleViewTypeChange = (newViewType: CalendarViewType) => {
     if (setViewType) {
@@ -220,6 +243,40 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
     onEventDelete?.(eventId);
   };
 
+  // Time change confirmation handlers
+  const showTimeChangeConfirmation = useCallback(
+    (event: CalendarEvent, newStart: Date, newEnd: Date) => {
+      setTimeChangeConfirmation({
+        visible: true,
+        event,
+        newStart,
+        newEnd,
+      });
+    },
+    []
+  );
+
+  const hideTimeChangeConfirmation = useCallback(() => {
+    setTimeChangeConfirmation(defaultTimeChangeConfirmation);
+  }, []);
+
+  const confirmTimeChange = useCallback(() => {
+    if (
+      timeChangeConfirmation.event &&
+      timeChangeConfirmation.newStart &&
+      timeChangeConfirmation.newEnd
+    ) {
+      const updatedEvent = {
+        ...timeChangeConfirmation.event,
+        start: timeChangeConfirmation.newStart,
+        end: timeChangeConfirmation.newEnd,
+      };
+
+      handleEventUpdate(updatedEvent);
+      hideTimeChangeConfirmation();
+    }
+  }, [timeChangeConfirmation]);
+
   const value: CalendarContextType = {
     events,
     viewType: setViewType ? initialViewType : internalViewType,
@@ -236,6 +293,7 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
     calendarConfig,
     zoomLevel,
     isDragEnabled,
+    timeChangeConfirmation,
     onEventPress,
     onTimeSlotPress,
     onEventCreate: handleEventCreate,
@@ -248,6 +306,9 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
     setSelectedDate: handleSelectedDateChange,
     setZoomLevel: handleZoomChange,
     setIsDragEnabled: setInternalDragEnabled,
+    showTimeChangeConfirmation,
+    hideTimeChangeConfirmation,
+    confirmTimeChange,
   };
 
   return (

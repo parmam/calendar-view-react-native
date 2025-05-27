@@ -37,7 +37,10 @@ import {
   UnavailableHours,
   HapticOptions,
   CalendarConfig,
+  SnapLineIndicator,
 } from "./types";
+import { useLayoutConfig } from "./config";
+import TimeChangeConfirmationModal from "./TimeChangeConfirmationModal";
 
 interface CalendarProps {
   events?: CalendarEvent[];
@@ -94,6 +97,10 @@ const CalendarContent: React.FC = () => {
   // Initialize logger
   const logger = useLogger("Calendar");
 
+  // Get layout config for height constants
+  const { layoutConfig } = useLayoutConfig();
+  const HOUR_HEIGHT = layoutConfig.HOUR_HEIGHT;
+
   const {
     events,
     viewType,
@@ -109,12 +116,17 @@ const CalendarContent: React.FC = () => {
     setViewType,
     setSelectedDate,
     setZoomLevel,
+    timeInterval,
   } = useCalendar();
 
   // Refs para los gestos
   const pinchRef = useRef(null);
   const dragStartTime = useRef<Date | null>(null);
   const dragCurrentTime = useRef<Date | null>(null);
+
+  // State for snap line indicator
+  const [snapLineIndicator, setSnapLineIndicator] =
+    useState<SnapLineIndicator | null>(null);
 
   // Navigate to previous period
   const handlePrevious = useCallback(() => {
@@ -304,7 +316,57 @@ const CalendarContent: React.FC = () => {
       gestureState: PanResponderGestureState
     ) => {
       // Actualizar tiempo actual durante el drag
-      // Ajustar dragCurrentTime.current según el movimiento
+      if (dragStartTime.current) {
+        // Calculate minutes per pixel
+        const minutesPerPixel = timeInterval / (HOUR_HEIGHT / 60);
+
+        // Get raw minute difference from drag
+        const rawMinuteDiff = gestureState.dy * minutesPerPixel;
+
+        // Get original time in minutes from midnight
+        const startTimeMinutes =
+          dragStartTime.current.getHours() * 60 +
+          dragStartTime.current.getMinutes();
+
+        // Calculate new time in minutes from midnight
+        const newTimeMinutes = startTimeMinutes + rawMinuteDiff;
+
+        // Snap to nearest interval grid point
+        const snappedTimeMinutes =
+          Math.round(newTimeMinutes / timeInterval) * timeInterval;
+
+        // Create a date object for the snap position
+        const snapTime = new Date(dragStartTime.current);
+        snapTime.setHours(
+          Math.floor(snappedTimeMinutes / 60),
+          snappedTimeMinutes % 60,
+          0,
+          0
+        );
+
+        // Update current time
+        dragCurrentTime.current = snapTime;
+
+        // Update the snap line indicator
+        if (snapTime) {
+          setSnapLineIndicator({
+            time: snapTime,
+            visible: true,
+            color: theme.successColor || "#4CAF50",
+          });
+        }
+
+        logger.debug("Drag movement", {
+          dy: gestureState.dy,
+          minutesPerPixel,
+          rawMinuteDiff,
+          startTimeMinutes,
+          newTimeMinutes,
+          snappedTimeMinutes,
+          snapTime: snapTime.toLocaleTimeString(),
+          timeInterval,
+        });
+      }
     },
     onPanResponderRelease: () => {
       // Finalizar creación del evento
@@ -329,13 +391,19 @@ const CalendarContent: React.FC = () => {
         // Limpiar refs
         dragStartTime.current = null;
         dragCurrentTime.current = null;
+
+        // Hide the snap line
+        setSnapLineIndicator(null);
+
+        // Call onDragEnd callback
+        handleDragEnd();
       }
     },
   });
 
   // Handle dragging events
   const handleEventDrag = useCallback(
-    (event: CalendarEvent, minuteDiff: number): boolean => {
+    (event: CalendarEvent, minuteDiff: number, snapTime?: Date): boolean => {
       // Calcular nuevas fechas
       const newStart = new Date(event.start);
       newStart.setMinutes(newStart.getMinutes() + minuteDiff);
@@ -351,6 +419,15 @@ const CalendarContent: React.FC = () => {
         minuteDiff,
         hasUnavailableHours: !!unavailableHours,
       });
+
+      // Update snap line indicator if a snap time is provided
+      if (snapTime) {
+        setSnapLineIndicator({
+          time: snapTime,
+          visible: true,
+          color: theme.successColor || "#4CAF50",
+        });
+      }
 
       // Verificar si el destino es válido
       if (unavailableHours) {
@@ -414,8 +491,14 @@ const CalendarContent: React.FC = () => {
 
       return true; // Permitir arrastrar
     },
-    [unavailableHours]
+    [unavailableHours, theme.successColor]
   );
+
+  // Function to handle the end of drag events
+  const handleDragEnd = useCallback(() => {
+    // Hide the snap line when drag ends
+    setSnapLineIndicator(null);
+  }, []);
 
   const renderContent = () => {
     switch (viewType) {
@@ -430,6 +513,9 @@ const CalendarContent: React.FC = () => {
               viewType={viewType}
               panHandlers={isDragEnabled ? panResponder.panHandlers : undefined}
               onEventDrag={handleEventDrag}
+              onDragEnd={handleDragEnd}
+              snapLineIndicator={snapLineIndicator}
+              timeInterval={timeInterval}
             />
           </>
         );
@@ -441,6 +527,9 @@ const CalendarContent: React.FC = () => {
             viewType={viewType}
             panHandlers={isDragEnabled ? panResponder.panHandlers : undefined}
             onEventDrag={handleEventDrag}
+            onDragEnd={handleDragEnd}
+            snapLineIndicator={snapLineIndicator}
+            timeInterval={timeInterval}
           />
         );
     }
@@ -458,6 +547,9 @@ const CalendarContent: React.FC = () => {
       <PinchGestureHandler ref={pinchRef} onGestureEvent={onPinchGestureEvent}>
         <View style={styles.contentContainer}>{renderContent()}</View>
       </PinchGestureHandler>
+
+      {/* Time change confirmation modal */}
+      <TimeChangeConfirmationModal />
     </View>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   StyleSheet,
@@ -21,6 +21,7 @@ import {
   useLoggingControl,
 } from "./src/hooks/useLoggingControl";
 import { logger } from "./src/components/Calendar/utils/logger";
+import { useCalendarConfig } from "./src/components/Calendar/config/useCalendarConfig";
 // Importaciones para FontAwesome
 import { library } from "@fortawesome/fontawesome-svg-core";
 import { faCalendarAlt } from "@fortawesome/free-solid-svg-icons";
@@ -265,47 +266,47 @@ const DebugControls: React.FC<{
   calendarConfig: any;
   onConfigChange: (config: any) => void;
 }> = ({ calendarConfig, onConfigChange }) => {
+  const previewOffset = calendarConfig.dragPreviewConfig?.previewOffset || 20;
   const { loggingEnabled, enableLogging, disableLogging } = useLoggingControl();
 
-  // Handler for changing preview offset
+  // Manejar cambios en el offset de previsualización
   const handlePreviewOffsetChange = (change: number) => {
-    const newOffset = Math.max(
-      5,
-      (calendarConfig.dragPreviewConfig.previewOffset || 20) + change
-    );
-    const newConfig = {
-      ...calendarConfig,
-      dragPreviewConfig: {
-        ...calendarConfig.dragPreviewConfig,
-        previewOffset: newOffset,
-      },
-    };
-    onConfigChange(newConfig);
-    logger.debug("Updated drag preview offset", {
-      previousOffset: calendarConfig.dragPreviewConfig.previewOffset,
-      newOffset,
-      change,
-    });
+    const newOffset = previewOffset + change;
+    if (newOffset >= 0) {
+      const newConfig = {
+        ...calendarConfig,
+        dragPreviewConfig: {
+          ...calendarConfig.dragPreviewConfig,
+          previewOffset: newOffset,
+        },
+      };
+      onConfigChange(newConfig);
+      logger.debug("Updated drag preview offset", {
+        previous: previewOffset,
+        new: newOffset,
+      });
+    }
   };
 
-  // Set exact value for offset
+  // Establecer un valor exacto para el offset
   const setExactOffset = (value: number) => {
-    const newOffset = Math.max(5, value);
-    const newConfig = {
-      ...calendarConfig,
-      dragPreviewConfig: {
-        ...calendarConfig.dragPreviewConfig,
-        previewOffset: newOffset,
-      },
-    };
-    onConfigChange(newConfig);
-    logger.debug("Set exact preview offset", {
-      previousOffset: calendarConfig.dragPreviewConfig.previewOffset,
-      newOffset: value,
-    });
+    if (value >= 0) {
+      const newConfig = {
+        ...calendarConfig,
+        dragPreviewConfig: {
+          ...calendarConfig.dragPreviewConfig,
+          previewOffset: value,
+        },
+      };
+      onConfigChange(newConfig);
+      logger.debug("Set exact preview offset", {
+        previous: previewOffset,
+        new: value,
+      });
+    }
   };
 
-  // Reset to default
+  // Restablecer el offset al valor predeterminado
   const resetToDefault = () => {
     const newConfig = {
       ...calendarConfig,
@@ -318,128 +319,75 @@ const DebugControls: React.FC<{
     logger.debug("Reset preview offset to default", { newOffset: 20 });
   };
 
-  // Common offsets for quick testing
-  const quickOffsets = [10, 15, 20, 25, 30, 40, 50];
+  // Alternar el logging
+  const toggleLogging = () => {
+    if (loggingEnabled) {
+      disableLogging();
+    } else {
+      enableLogging();
+    }
+  };
 
   return (
-    <View style={styles.debugControls}>
-      <Text style={styles.debugTitle}>Debug Controls</Text>
-      <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={[
-            styles.debugButton,
-            loggingEnabled ? styles.activeButton : null,
-          ]}
-          onPress={enableLogging}
-        >
-          <Text
+    <View style={styles.debugControlsContainer}>
+      <Text style={styles.debugTitle}>Controles de Depuración</Text>
+
+      <View style={styles.debugSection}>
+        <Text style={styles.debugSectionTitle}>Logging</Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
             style={[
-              styles.buttonText,
-              loggingEnabled ? styles.activeButtonText : null,
+              styles.debugButton,
+              { backgroundColor: loggingEnabled ? "#4CD964" : "#FF3B30" },
             ]}
+            onPress={toggleLogging}
           >
-            Enable Logs
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.debugButton,
-            !loggingEnabled ? styles.activeButton : null,
-          ]}
-          onPress={disableLogging}
-        >
-          <Text
-            style={[
-              styles.buttonText,
-              !loggingEnabled ? styles.activeButtonText : null,
-            ]}
-          >
-            Disable Logs
-          </Text>
-        </TouchableOpacity>
+            <Text style={styles.debugButtonText}>
+              {loggingEnabled ? "Deshabilitar Logs" : "Habilitar Logs"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.debugSection}>
         <Text style={styles.debugSectionTitle}>
-          Drag Preview Offset: {calendarConfig.dragPreviewConfig.previewOffset}
-          px
+          Desplazamiento de previsualización: {previewOffset}px
         </Text>
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={styles.debugButton}
-            onPress={() => handlePreviewOffsetChange(-10)}
-          >
-            <Text style={styles.buttonText}>-10px</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.debugButton}
             onPress={() => handlePreviewOffsetChange(-5)}
           >
-            <Text style={styles.buttonText}>-5px</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.debugButton}
-            onPress={() => handlePreviewOffsetChange(-1)}
-          >
-            <Text style={styles.buttonText}>-1px</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.debugButton} onPress={resetToDefault}>
-            <Text style={styles.buttonText}>Reset</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.debugButton}
-            onPress={() => handlePreviewOffsetChange(1)}
-          >
-            <Text style={styles.buttonText}>+1px</Text>
+            <Text style={styles.debugButtonText}>-5</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.debugButton}
             onPress={() => handlePreviewOffsetChange(5)}
           >
-            <Text style={styles.buttonText}>+5px</Text>
+            <Text style={styles.debugButtonText}>+5</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.debugButton}
-            onPress={() => handlePreviewOffsetChange(10)}
+            onPress={() => setExactOffset(10)}
           >
-            <Text style={styles.buttonText}>+10px</Text>
+            <Text style={styles.debugButtonText}>10px</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => setExactOffset(20)}
+          >
+            <Text style={styles.debugButtonText}>20px</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => setExactOffset(30)}
+          >
+            <Text style={styles.debugButtonText}>30px</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.debugButton} onPress={resetToDefault}>
+            <Text style={styles.debugButtonText}>Reset</Text>
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.debugSectionTitle}>Quick Offset Values</Text>
-        <View style={styles.buttonRow}>
-          {quickOffsets.map((offset) => (
-            <TouchableOpacity
-              key={`offset-${offset}`}
-              style={[
-                styles.debugButton,
-                calendarConfig.dragPreviewConfig.previewOffset === offset
-                  ? styles.activeButton
-                  : null,
-              ]}
-              onPress={() => setExactOffset(offset)}
-            >
-              <Text
-                style={[
-                  styles.buttonText,
-                  calendarConfig.dragPreviewConfig.previewOffset === offset
-                    ? styles.activeButtonText
-                    : null,
-                ]}
-              >
-                {offset}px
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.debugNote}>
-          Current offset: {calendarConfig.dragPreviewConfig.previewOffset}px
-          (recommended: 15-25px)
-        </Text>
-        <Text style={styles.debugNote}>
-          Drag an event to test the preview position.
-        </Text>
       </View>
     </View>
   );
@@ -448,22 +396,35 @@ const DebugControls: React.FC<{
 // Main App without logging provider
 const AppContent = () => {
   const [events, setEvents] = useState<CalendarEvent[]>(generateSampleEvents());
-  const [viewType, setViewType] = useState<CalendarViewType>("week");
+  const [selectedViewType, setSelectedViewType] =
+    useState<CalendarViewType>("week");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const { loggingEnabled, enableLogging, disableLogging } = useLoggingControl();
-
-  // Calendar configuration state
   const [calendarConfig, setCalendarConfig] = useState({
     dragPreviewConfig: {
-      previewOffset: 20, // Default 20px offset for drag preview
+      previewOffset: 20,
       connectionLineWidth: 2,
     },
   });
 
-  // Handle configuration changes
+  // Configuración inicial: deshabilitar logs en producción
+  const { updatePerformanceConfig } = useCalendarConfig();
+
+  // Ejemplo: Para deshabilitar logs de forma programática, descomentar estas líneas:
+  // useEffect(() => {
+  //   updatePerformanceConfig({
+  //     LOGGING_ENABLED: false,
+  //     LOGGING_LEVEL: "error" // Solo mostrar errores si está habilitado
+  //   });
+  // }, []);
+
+  // Manejar cambios en la configuración
   const handleConfigChange = (newConfig: any) => {
     setCalendarConfig(newConfig);
+    logger.debug("Calendar configuration", {
+      previous: calendarConfig,
+      new: newConfig,
+    });
   };
 
   // Handle creating a new event
@@ -527,8 +488,11 @@ const AppContent = () => {
 
   // Handle view change
   const handleViewChange = (newViewType: CalendarViewType) => {
-    logger.debug("View changed", { previous: viewType, new: newViewType });
-    setViewType(newViewType);
+    logger.debug("View changed", {
+      previous: selectedViewType,
+      new: newViewType,
+    });
+    setSelectedViewType(newViewType);
   };
 
   // Handle date change
@@ -585,12 +549,11 @@ const AppContent = () => {
   };
 
   logger.debug("Calendar configuration", {
-    viewType,
+    selectedViewType,
     zoomLevel,
     theme: "custom",
     hapticOptions,
     calendarConfig,
-    loggingEnabled,
   });
 
   return (
@@ -599,7 +562,7 @@ const AppContent = () => {
         <View style={styles.calendarContainer}>
           <Calendar
             events={events}
-            initialViewType={viewType}
+            initialViewType={selectedViewType}
             initialDate={selectedDate}
             timeRange={{ start: 7, end: 22 }}
             onEventCreate={handleEventCreate}
@@ -651,7 +614,7 @@ const styles = StyleSheet.create({
   calendarContainer: {
     flex: 1,
   },
-  debugControls: {
+  debugControlsContainer: {
     padding: 10,
     backgroundColor: "#f0f0f0",
     borderTopWidth: 1,
@@ -682,19 +645,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
   },
-  activeButton: {
-    backgroundColor: "#2196F3",
-    borderColor: "#1976D2",
-  },
-  buttonText: {
+  debugButtonText: {
     fontWeight: "500",
     color: "#333",
     fontSize: 11,
     textAlign: "center",
-  },
-  activeButtonText: {
-    fontWeight: "bold",
-    color: "#fff",
   },
   debugSection: {
     marginTop: 10,
@@ -710,11 +665,5 @@ const styles = StyleSheet.create({
     marginTop: 5,
     textAlign: "center",
     color: "#333",
-  },
-  debugNote: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 5,
-    textAlign: "center",
   },
 });
