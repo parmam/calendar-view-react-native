@@ -71,6 +71,8 @@ export const defaultCalendarConfig: CalendarConfig = {
   dragPreviewConfig: {
     previewOffset: 20, // Default 20px offset
     connectionLineWidth: 2,
+    pagingScrollHours: 3, // Por defecto, mostrará 3 horas adicionales al hacer scroll
+    enablePagingScroll: true, // Activar scroll paginado por defecto
   },
 };
 

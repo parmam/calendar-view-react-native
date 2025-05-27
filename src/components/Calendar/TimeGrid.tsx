@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -46,6 +52,7 @@ interface TimeGridProps {
   onDragEnd?: () => void;
   snapLineIndicator?: SnapLineIndicator | null;
   timeInterval?: number;
+  onDragNearEdge?: (distanceFromEdge: number, direction: "up" | "down") => void;
 }
 
 const TimeGrid: React.FC<TimeGridProps> = ({
@@ -55,6 +62,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
   onDragEnd,
   snapLineIndicator,
   timeInterval: propTimeInterval,
+  onDragNearEdge,
 }) => {
   // Initialize logger
   const logger = useLogger("TimeGrid");
@@ -84,11 +92,13 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     zoomLevel,
     unavailableHours,
     timeInterval: contextTimeInterval,
+    calendarConfig,
   } = useCalendar();
 
   // Use provided timeInterval or fall back to context value
   const timeInterval = propTimeInterval || contextTimeInterval || 30;
 
+  // IMPORTANTE: Declarar TODOS los estados al inicio del componente
   const [gridWidth, setGridWidth] = useState(SCREEN_WIDTH - TIME_LABEL_WIDTH);
   const [isResizingEvent, setIsResizingEvent] = useState(false);
   const [newEventCoords, setNewEventCoords] = useState<{
@@ -97,555 +107,45 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     dayIndex: number;
     isCreating: boolean;
   } | null>(null);
-
-  // Estado para rastrear la zona de destino durante el arrastre
   const [dragTarget, setDragTarget] = useState<{
     dayIndex: number;
     hour: number;
     minute: number;
   } | null>(null);
-
-  // Forzar recálculo de posiciones cuando hay cambios en los eventos
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // Efecto para detectar cambios en eventos y forzar recálculo
-  useEffect(() => {
-    // Incrementar la key para forzar el recálculo de posiciones
-    setRefreshKey((prev) => prev + 1);
-    logger.debug("Events updated, forcing recalculation", {
-      eventCount: events.length,
-      refreshKey: refreshKey + 1,
-    });
-  }, [events]);
-
-  // Efecto para hacer debug del refreshKey
-  useEffect(() => {
-    logger.debug("Refresh triggered", { refreshKey });
-  }, [refreshKey]);
-
-  // Generate hours based on time range
-  const hours = useMemo(() => {
-    const result = [];
-    for (let hour = timeRange.start; hour < timeRange.end; hour++) {
-      result.push(hour);
-    }
-    return result;
-  }, [timeRange]);
-
-  // Calculate dates to display based on view type
-  const dates = useMemo(() => {
-    switch (viewType) {
-      case "day":
-        return [selectedDate];
-      case "3day": {
-        const result = [];
-        for (let i = 0; i < 3; i++) {
-          const date = new Date(selectedDate);
-          date.setDate(date.getDate() + i);
-          result.push(date);
-        }
-        return result;
-      }
-      case "week":
-        return getWeekDates(selectedDate, firstDayOfWeek).filter((_, i) =>
-          visibleDays.includes(i)
-        );
-      case "workWeek":
-        // Solo mostrar días laborables (lunes a viernes)
-        return getWeekDates(selectedDate, 1).slice(0, 5);
-      default:
-        return [selectedDate];
-    }
-  }, [viewType, selectedDate, firstDayOfWeek, visibleDays]);
-
-  // Calculate column width based on grid width and number of days
-  const columnWidth = gridWidth / dates.length;
-
-  // Calculate now indicator position for today
-  const nowIndicatorPosition = useMemo(() => {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-
-    if (hours < timeRange.start || hours > timeRange.end) {
-      return null;
-    }
-
-    const position = (hours - timeRange.start) * HOUR_HEIGHT;
-    const minutePosition = (minutes / 60) * HOUR_HEIGHT;
-
-    return position + minutePosition;
-  }, [timeRange]);
-
-  // Scroll to current time on first render
-  useEffect(() => {
-    if (nowIndicatorPosition) {
-      const position = Math.max(0, nowIndicatorPosition - 100);
-      logger.debug("Scrolling to current time", { position });
-
-      // Use setTimeout to ensure component is mounted
-      setTimeout(() => {
-        scrollTo({ y: position, animated: true });
-      }, 500);
-    }
-  }, [nowIndicatorPosition, viewType, selectedDate, scrollTo]);
-
-  // Actualizar el scroll cada minuto para seguir la línea de tiempo actual
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-
-      if (
-        hours >= timeRange.start &&
-        hours <= timeRange.end &&
-        isToday(dates[0])
-      ) {
-        const position =
-          (hours - timeRange.start + minutes / 60) * HOUR_HEIGHT * zoomLevel;
-        const scrollPosition = Math.max(0, position - 100); // Centrar un poco por encima
-
-        logger.debug("Auto-scrolling to current time", { scrollPosition });
-        scrollTo({ y: scrollPosition, animated: true });
-      }
-    }, 60000); // Cada minuto
-
-    return () => clearInterval(interval);
-  }, [timeRange, zoomLevel, dates, selectedDate, scrollTo]);
-
-  // Grid layout
-  const onGridLayout = (e: LayoutChangeEvent) => {
-    const { width } = e.nativeEvent.layout;
-    setGridWidth(width);
-  };
-
-  // Función mejorada para posicionar los eventos y manejar solapamientos
-  const positionEventsWithOverlap = (
-    dayEvents: CalendarEvent[]
-  ): Array<CalendarEvent & { left: number; width: number }> => {
-    if (!dayEvents.length) return [];
-
-    // Ordenar eventos por hora de inicio y luego por duración
-    const sortedEvents = [...dayEvents].sort((a, b) => {
-      const startDiff = a.start.getTime() - b.start.getTime();
-      if (startDiff !== 0) return startDiff;
-
-      // Si la hora de inicio es la misma, ordenar por duración (más corta primero)
-      return (
-        a.end.getTime() -
-        a.start.getTime() -
-        (b.end.getTime() - b.start.getTime())
-      );
-    });
-
-    // Utilizamos el algoritmo de agrupación mejorado de utils
-    const overlapGroups = groupOverlappingEvents(sortedEvents);
-
-    // Calcular posición y ancho para cada evento
-    const positionedEvents: Array<
-      CalendarEvent & { left: number; width: number }
-    > = [];
-
-    overlapGroups.forEach((group) => {
-      if (group.length === 1) {
-        // Si solo hay un evento en el grupo, ocupa todo el ancho
-        positionedEvents.push({
-          ...group[0],
-          left: 5,
-          width: columnWidth - 10,
-        });
-        return;
-      }
-
-      // Para grupos con múltiples eventos, necesitamos resolver colisiones
-      // Paso 1: Crear una matriz de colisiones
-      const collisionMatrix: boolean[][] = [];
-      for (let i = 0; i < group.length; i++) {
-        collisionMatrix[i] = [];
-        for (let j = 0; j < group.length; j++) {
-          if (i === j) {
-            collisionMatrix[i][j] = false;
-            continue;
-          }
-
-          // Verificar colisiones entre eventos
-          const eventA = group[i];
-          const eventB = group[j];
-
-          // Un evento se solapa con otro si comparten algún intervalo de tiempo
-          collisionMatrix[i][j] = eventsOverlap(eventA, eventB);
-        }
-      }
-
-      // Paso 2: Asignar columnas a los eventos usando un algoritmo más eficiente
-      const eventColumns: number[] = Array(group.length).fill(-1);
-      const maxColumnsPerEvent: number[] = Array(group.length).fill(1);
-
-      // Primero, asignar columnas basadas en colisiones
-      for (let i = 0; i < group.length; i++) {
-        // Obtener todas las columnas ya ocupadas por eventos que se solapan con este
-        const usedColumns = new Set<number>();
-        for (let j = 0; j < i; j++) {
-          if (collisionMatrix[i][j] && eventColumns[j] !== -1) {
-            usedColumns.add(eventColumns[j]);
-          }
-        }
-
-        // Encontrar la primera columna disponible
-        let column = 0;
-        while (usedColumns.has(column)) {
-          column++;
-        }
-
-        eventColumns[i] = column;
-      }
-
-      // Identificar el número máximo de columnas necesarias
-      const maxColumn = Math.max(...eventColumns);
-      // Usar MAX_COLUMNS del overlapConfig para limitar el número de columnas
-      const maxAllowedColumns = overlapConfig.MAX_COLUMNS;
-      const totalColumns = Math.min(maxColumn + 1, maxAllowedColumns);
-
-      // Log para debugging
-      logger.debug("Event columns assignment", {
-        groupSize: group.length,
-        maxColumn,
-        totalColumns,
-        eventColumns,
-        events: group.map((e) => e.title),
-        startTimes: group.map((e) => e.start.toLocaleTimeString()),
-        endTimes: group.map((e) => e.end.toLocaleTimeString()),
-      });
-
-      // Paso 3: Calcular ancho y posición para cada evento
-      // Definir márgenes y espaciado
-      const marginLeft = 2;
-      const marginRight = 2;
-      const marginBetween = 1; // Espacio reducido entre eventos
-
-      // Calcular ancho disponible para todos los eventos en esta columna
-      const availableWidth = columnWidth - (marginLeft + marginRight);
-
-      // Ancho base para cada columna
-      const columnBaseWidth = availableWidth / totalColumns;
-
-      // Determinar el ancho mínimo para cada evento
-      const minEventWidth = Math.min(35, columnBaseWidth); // Permitir eventos más estrechos cuando hay muchas columnas
-
-      // Log de debugging para dimensiones
-      logger.debug("Event layout calculations", {
-        availableWidth,
-        totalColumns,
-        columnBaseWidth,
-        groupSize: group.length,
-        minEventWidth,
-      });
-
-      // Asignar anchos y posiciones
-      for (let i = 0; i < group.length; i++) {
-        // Calcular posición izquierda base
-        const leftPosition = marginLeft + eventColumns[i] * columnBaseWidth;
-
-        // Establecer márgenes mínimos y máximos para mantener los eventos dentro de la columna
-        const startMargin = marginLeft + (eventColumns[i] === 0 ? 2 : 0);
-        const endMargin = marginRight + (eventColumns[i] === maxColumn ? 2 : 0);
-
-        // Calcular ancho disponible para este evento en su posición
-        const maxWidthAtPosition = columnWidth - leftPosition - endMargin;
-
-        // Calcular ancho base ajustado al número de columnas
-        const baseWidth = Math.max(
-          columnBaseWidth - marginBetween,
-          minEventWidth
-        );
-
-        // Asegurar que el ancho no exceda el espacio disponible
-        const constrainedWidth = Math.min(baseWidth, maxWidthAtPosition);
-
-        // Mantener un ancho mínimo legible
-        const width = Math.max(constrainedWidth, minEventWidth);
-
-        // Ajustar la posición izquierda para asegurarnos de que no se sale de la columna
-        const maxLeftPosition = columnWidth - width - endMargin;
-        const adjustedLeft = Math.min(leftPosition, maxLeftPosition);
-
-        // Si el evento está en la última columna o es muy estrecho, darle un poco más de espacio
-        let finalWidth = width;
-        if (
-          (width < 40 && totalColumns <= 3) ||
-          eventColumns[i] === maxColumn
-        ) {
-          // Intentar expandir un poco los eventos pequeños, sin exceder límites
-          const expandedWidth = width * 1.1;
-          if (adjustedLeft + expandedWidth <= columnWidth - endMargin) {
-            finalWidth = expandedWidth;
-          }
-        }
-
-        positionedEvents.push({
-          ...group[i],
-          left: adjustedLeft,
-          width: finalWidth,
-        });
-      }
-    });
-
-    logger.debug("Positioned events with improved overlap algorithm", {
-      totalEvents: positionedEvents.length,
-      positions: positionedEvents.map((e) => ({
-        id: e.id,
-        title: e.title,
-        left: e.left,
-        width: e.width,
-        start: e.start.toLocaleTimeString(),
-        end: e.end.toLocaleTimeString(),
-      })),
-    });
-
-    return positionedEvents;
-  };
-
-  // Reemplazar getEventPosition en TimeGrid.renderEvents
-  const renderEvents = (dayIndex: number) => {
-    // Filtrar eventos para este día
-    const date = dates[dayIndex];
-    const allEvents = filterEventsByDay(events, date);
-
-    // Depuración de eventos
-    logger.debug(`Rendering events for day ${dayIndex}`, {
-      date: date.toISOString(),
-      eventCount: allEvents.length,
-      refreshKey,
-      events: allEvents.map((e) => ({
-        id: e.id,
-        title: e.title,
-        start: e.start.toISOString(),
-        end: e.end.toISOString(),
-      })),
-    });
-
-    if (allEvents.length === 0) return null;
-
-    // Calcular posición y dimensiones para cada evento
-    const positionedEvents = positionEventsWithOverlap(allEvents);
-
-    logger.debug(`Positioned events for day ${dayIndex}`, {
-      count: positionedEvents.length,
-      refreshKey,
-      positioned: positionedEvents.map((e) => ({
-        id: e.id,
-        title: e.title,
-        left: e.left,
-        width: e.width,
-      })),
-    });
-
-    return (
-      <>
-        {positionedEvents.map((item) => {
-          // Usar la función de posición exacta para mayor precisión
-          const { top, height } = getEventPositionExact(
-            item,
-            timeRange.start,
-            timeRange.end,
-            HOUR_HEIGHT * zoomLevel
-          );
-
-          logger.debug(`Event position for ${item.id}`, {
-            title: item.title,
-            startHour: item.start.getHours(),
-            startMinute: item.start.getMinutes(),
-            endHour: item.end.getHours(),
-            endMinute: item.end.getMinutes(),
-            top,
-            height,
-            left: item.left,
-            width: item.width,
-            hourHeight: HOUR_HEIGHT * zoomLevel,
-            rangeStart: timeRange.start,
-            rangeEnd: timeRange.end,
-            zoomLevel,
-            refreshKey,
-          });
-
-          // Add a function to handle event drag with snap time
-          const handleEventDragWithSnap = (
-            event: CalendarEvent,
-            minuteDiff: number,
-            snapTime: Date
-          ): boolean => {
-            // Call the provided onEventDrag handler with the snap time
-            if (onEventDrag) {
-              return onEventDrag(event, minuteDiff, snapTime);
-            }
-            return true;
-          };
-
-          // Add a function to handle event drag end
-          const handleEventDragEnd = () => {
-            if (onDragEnd) {
-              onDragEnd();
-            }
-          };
-
-          return (
-            <Event
-              key={`${item.id}-${refreshKey}`}
-              event={item}
-              top={top}
-              left={item.left}
-              width={item.width}
-              height={height}
-              isResizing={isResizingEvent}
-              setIsResizing={setIsResizingEvent}
-              onEventDragWithSnap={handleEventDragWithSnap}
-              onEventDragEnd={handleEventDragEnd}
-            />
-          );
-        })}
-      </>
-    );
-  };
-
-  // Check if a specific time slot is unavailable
-  const isTimeSlotUnavailable = (
-    date: Date,
-    hour: number,
-    minute: number
-  ): boolean => {
-    if (!unavailableHours) return false;
-
-    // Get day of week (0 = Sunday, 1 = Monday, etc.)
-    const dayOfWeek = date.getDay();
-
-    // Check if this day is included in unavailable days
-    const daysToCheck = unavailableHours.days || [0, 1, 2, 3, 4, 5, 6]; // Default to all days
-    if (!daysToCheck.includes(dayOfWeek)) return false;
-
-    // Create a decimal time value (e.g. 9.5 for 9:30)
-    const timeValue = hour + minute / 60;
-
-    // Check if time falls within any unavailable range
-    return unavailableHours.ranges.some(
-      (range) => timeValue >= range.start && timeValue < range.end
-    );
-  };
-
-  // Handle time slot press, checking for unavailability
-  const handleTimeSlotPress = (
-    dayIndex: number,
-    hour: number,
-    minutes: number
-  ) => {
-    if (isResizingEvent || !onTimeSlotPress) return;
-
-    // Don't create event if already creating one
-    if (newEventCoords?.isCreating) return;
-
-    // Create start and end dates
-    const date = dates[dayIndex];
-
-    // Check if the time slot is unavailable
-    if (isTimeSlotUnavailable(date, hour, minutes)) {
-      logger.debug("Time slot is unavailable", { date, hour, minutes });
-      return; // Don't allow interaction with unavailable time slots
-    }
-
-    const start = new Date(date);
-    start.setHours(hour, minutes, 0, 0);
-
-    // End time is 1 hour after start by default
-    const end = new Date(start);
-    end.setHours(hour + 1, minutes, 0, 0);
-
-    // Call the callback
-    logger.debug("Time slot pressed", { start, end });
-    onTimeSlotPress(start, end);
-  };
-
-  // Function to create an event using drag gesture
-  const createEventWithDrag = (start: Date, end: Date, dayIndex: number) => {
-    if (!newEventCoords || !onEventCreate) return;
-
-    // Ensure end time is after start time
-    if (end <= start) {
-      end = new Date(start);
-      end.setHours(start.getHours() + 1);
-    }
-
-    // Create event object
-    const newEvent: CalendarEvent = {
-      id: `temp-event-${Date.now()}`,
-      title: "Nuevo evento",
-      start,
-      end,
-      color:
-        theme.eventColors[Math.floor(Math.random() * theme.eventColors.length)],
-    };
-
-    // Call the callback
-    logger.debug("Creating event with drag", newEvent);
-    onEventCreate(newEvent);
-
-    // Reset coordinates
-    setNewEventCoords(null);
-  };
-
-  // Function to convert y coordinate to time
-  const yToTime = (y: number): { hour: number; minutes: number } => {
-    // Adjust for zoom level
-    const adjustedY = y / zoomLevel;
-
-    // Calculate total minutes from timeRange.start
-    const totalMinutesFromRangeStart = (adjustedY / HOUR_HEIGHT) * 60;
-
-    // Calculate total minutes from midnight
-    const minutesFromMidnight =
-      timeRange.start * 60 + totalMinutesFromRangeStart;
-
-    // Snap to the nearest timeInterval
-    const snappedMinutesFromMidnight =
-      Math.round(minutesFromMidnight / timeInterval) * timeInterval;
-
-    // Convert back to hours and minutes
-    const hour = Math.floor(snappedMinutesFromMidnight / 60);
-    const minutes = snappedMinutesFromMidnight % 60;
-
-    logger.debug("Time conversion from y-coordinate", {
-      y,
-      adjustedY,
-      totalMinutesFromRangeStart,
-      minutesFromMidnight,
-      snappedMinutesFromMidnight,
-      hour,
-      minutes,
-      timeInterval,
-    });
-
-    return { hour, minutes };
-  };
-
-  // Animated styles
+  const [scrollViewHeight, setScrollViewHeight] = useState(0);
+  const [autoScrolling, setAutoScrolling] = useState({
+    active: false,
+    direction: null as "up" | "down" | null,
+    speed: 0,
+  });
+  const [localSnapLineIndicator, setLocalSnapLineIndicator] =
+    useState<SnapLineIndicator | null>(null);
+
+  // Usamos el snapLineIndicator proporcionado por prop o el estado local
+  const effectiveSnapLineIndicator =
+    snapLineIndicator || localSnapLineIndicator;
+
+  // Animated styles for event creation
   const createEventOpacity = new Animated.Value(0);
 
   // Show creation indicator
-  const showEventIndicator = () => {
+  const showEventIndicator = useCallback(() => {
     Animated.timing(createEventOpacity, {
       toValue: 0.7,
       duration: 200,
       useNativeDriver: true,
     }).start();
-  };
+  }, []);
 
   // Hide creation indicator
-  const hideEventIndicator = () => {
+  const hideEventIndicator = useCallback(() => {
     Animated.timing(createEventOpacity, {
       toValue: 0,
       duration: 200,
       useNativeDriver: true,
     }).start();
-  };
+  }, []);
 
   // Create event gesture
   const createEventGesture = Gesture.Pan()
@@ -706,50 +206,1028 @@ const TimeGrid: React.FC<TimeGridProps> = ({
       hideEventIndicator();
       setNewEventCoords(null);
     })
-    .simultaneousWithExternalGesture(); // Allow scrolling while panning without specifying Gesture.Scroll
+    .simultaneousWithExternalGesture();
 
-  // Función para resaltar la zona de destino durante el arrastre
-  const highlightDropZone = (
-    dayIndex: number,
-    hour: number,
-    minute: number
-  ) => {
-    if (isResizingEvent) {
-      logger.debug("Resaltando zona de destino", {
-        dayIndex,
-        date: dates[dayIndex].toLocaleDateString(),
-        hour,
-        minute,
-        fullTime: `${hour}:${minute.toString().padStart(2, "0")}`,
-        isResizingEvent,
+  // IMPORTANTE: Mover todos los useMemo al inicio, antes de cualquier useEffect o función
+  // Generate hours based on time range
+  const hours = useMemo(() => {
+    const result = [];
+    for (let hour = timeRange.start; hour < timeRange.end; hour++) {
+      result.push(hour);
+    }
+    return result;
+  }, [timeRange]);
+
+  // Calculate dates to display based on view type
+  const dates = useMemo(() => {
+    switch (viewType) {
+      case "day":
+        return [selectedDate];
+      case "3day": {
+        const result = [];
+        for (let i = 0; i < 3; i++) {
+          const date = new Date(selectedDate);
+          date.setDate(date.getDate() + i);
+          result.push(date);
+        }
+        return result;
+      }
+      case "week":
+        return getWeekDates(selectedDate, firstDayOfWeek).filter((_, i) =>
+          visibleDays.includes(i)
+        );
+      case "workWeek":
+        // Solo mostrar días laborables (lunes a viernes)
+        return getWeekDates(selectedDate, 1).slice(0, 5);
+      default:
+        return [selectedDate];
+    }
+  }, [viewType, selectedDate, firstDayOfWeek, visibleDays]);
+
+  // Calculate column width based on grid width and number of dates
+  const columnWidth = useMemo(
+    () => gridWidth / dates.length,
+    [gridWidth, dates.length]
+  );
+
+  // Calculate now indicator position for today
+  const nowIndicatorPosition = useMemo(() => {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+
+    if (hours < timeRange.start || hours > timeRange.end) {
+      return null;
+    }
+
+    const position = (hours - timeRange.start) * HOUR_HEIGHT;
+    const minutePosition = (minutes / 60) * HOUR_HEIGHT;
+
+    return position + minutePosition;
+  }, [timeRange, HOUR_HEIGHT]);
+
+  // Debug for day view
+  useEffect(() => {
+    if (viewType === "day") {
+      logger.debug("🗓️ DAY VIEW ACTIVE", {
+        dates: dates.length,
+        columnWidth,
+        gridWidth,
+        viewType,
+      });
+    }
+  }, [viewType, dates.length, columnWidth, gridWidth, logger]);
+
+  // Todas las funciones useCallback deben declararse antes de los useEffect que las usan
+  // Add a handler to measure the scroll view
+  const handleScrollViewLayout = useCallback((event: LayoutChangeEvent) => {
+    const { height } = event.nativeEvent.layout;
+    setScrollViewHeight(height);
+  }, []);
+
+  // Grid layout
+  const onGridLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width } = e.nativeEvent.layout;
+    setGridWidth(width);
+  }, []);
+
+  // Función para validar si un evento puede ser arrastrado a una posición específica
+  const handleEventDrag = useCallback(
+    (event: CalendarEvent, minuteDiff: number, snapTime?: Date): boolean => {
+      // Implementación actual...
+      // Calcular nuevas fechas
+      const newStart = new Date(event.start);
+      newStart.setMinutes(newStart.getMinutes() + minuteDiff);
+
+      const newEnd = new Date(event.end);
+      newEnd.setMinutes(newEnd.getMinutes() + minuteDiff);
+
+      logger.debug("Validando arrastre de evento", {
+        eventId: event.id,
+        eventTitle: event.title,
+        originalStart: event.start.toLocaleTimeString(),
+        newStart: newStart.toLocaleTimeString(),
+        minuteDiff,
+        hasUnavailableHours: !!unavailableHours,
       });
 
-      setDragTarget({ dayIndex, hour, minute });
-    } else {
-      setDragTarget(null);
-    }
-  };
-
-  // Limpiar la zona de destino cuando se suelta el evento
-  useEffect(() => {
-    if (!isResizingEvent) {
-      if (dragTarget) {
-        logger.debug("Limpiando zona de destino", {
-          previousTarget: dragTarget
-            ? {
-                dayIndex: dragTarget.dayIndex,
-                date:
-                  dates[dragTarget.dayIndex]?.toLocaleDateString() || "unknown",
-                time: `${dragTarget.hour}:${dragTarget.minute
-                  .toString()
-                  .padStart(2, "0")}`,
-              }
-            : null,
+      // Update snap line indicator if a snap time is provided
+      if (snapTime && effectiveSnapLineIndicator) {
+        setLocalSnapLineIndicator({
+          time: snapTime,
+          visible: true,
+          color: theme.successColor || "#4CAF50",
         });
       }
-      setDragTarget(null);
+
+      // Verificar si el destino es válido
+      if (unavailableHours) {
+        // Obtener día de la semana
+        const dayOfWeek = newStart.getDay();
+
+        // Verificar si este día está incluido en días no disponibles
+        const daysToCheck = unavailableHours.days || [0, 1, 2, 3, 4, 5, 6];
+        if (daysToCheck.includes(dayOfWeek)) {
+          // Verificar si la hora cae dentro de algún rango no disponible
+          const timeValue = newStart.getHours() + newStart.getMinutes() / 60;
+
+          logger.debug("Verificando restricciones horarias", {
+            eventId: event.id,
+            dayOfWeek,
+            timeValue,
+            day: [
+              "Domingo",
+              "Lunes",
+              "Martes",
+              "Miércoles",
+              "Jueves",
+              "Viernes",
+              "Sábado",
+            ][dayOfWeek],
+            unavailableRanges: unavailableHours.ranges,
+          });
+
+          const isUnavailable = unavailableHours.ranges.some(
+            (range) => timeValue >= range.start && timeValue < range.end
+          );
+
+          if (isUnavailable) {
+            logger.debug("Arrastre bloqueado por horario no disponible", {
+              eventId: event.id,
+              dayOfWeek,
+              timeValue,
+              day: [
+                "Domingo",
+                "Lunes",
+                "Martes",
+                "Miércoles",
+                "Jueves",
+                "Viernes",
+                "Sábado",
+              ][dayOfWeek],
+              newStart: newStart.toLocaleTimeString(),
+              minuteDiff,
+            });
+            return false; // No permitir arrastrar a esta zona
+          }
+        }
+      }
+
+      logger.debug("Arrastre de evento permitido", {
+        eventId: event.id,
+        newStart: newStart.toLocaleTimeString(),
+        newEnd: newEnd.toLocaleTimeString(),
+        minuteDiff,
+      });
+
+      return true; // Permitir arrastrar
+    },
+    [unavailableHours, theme.successColor, logger, effectiveSnapLineIndicator]
+  );
+
+  const handleEventDragEnd = useCallback(() => {
+    // Detener inmediatamente el autoscroll
+    if (autoScrolling.active) {
+      logger.debug("✋ DRAG ENDED: Stopping auto-scroll immediately", {
+        wasActive: autoScrolling.active,
+        direction: autoScrolling.direction,
+        finalScrollPosition: scrollPosition.y.toFixed(1),
+        viewType,
+      });
+
+      // Desactivar autoscroll de forma inmediata usando actualización funcional
+      setAutoScrolling((prevState) => {
+        if (prevState.active) {
+          return {
+            active: false,
+            direction: null,
+            speed: 0,
+          };
+        }
+        return prevState; // No cambiar el estado si ya no está activo
+      });
     }
-  }, [isResizingEvent, dragTarget, dates]);
+
+    // Ocultar la línea de snap cuando termina el arrastre
+    if (localSnapLineIndicator) {
+      setLocalSnapLineIndicator(null);
+    }
+
+    // Usamos onDragEnd en lugar de intentar modificar snapLineIndicator directamente
+    if (onDragEnd) {
+      onDragEnd();
+    }
+  }, [
+    autoScrolling,
+    scrollPosition.y,
+    onDragEnd,
+    viewType,
+    logger,
+    localSnapLineIndicator,
+  ]);
+
+  // Función mejorada para handleDragNearEdge
+  const handleDragNearEdge = useCallback(
+    (distanceFromEdge: number, direction: "up" | "down") => {
+      try {
+        // Safety check for day view
+        if (viewType === "day" && (!dates || dates.length === 0)) {
+          logger.warn("⚠️ DAY VIEW DRAG ISSUE: No dates available", {
+            viewType,
+          });
+          return;
+        }
+
+        // Obtener la configuración de scroll paginado
+        const pagingScrollEnabled =
+          calendarConfig?.dragPreviewConfig?.enablePagingScroll !== false;
+        const pagingScrollHours =
+          calendarConfig?.dragPreviewConfig?.pagingScrollHours || 3;
+
+        // Define thresholds
+        const edgeThreshold = 100; // px from edge to start scrolling
+
+        // Solo activar scroll si estamos dentro del umbral
+        if (distanceFromEdge > edgeThreshold) {
+          if (autoScrolling.active) {
+            logger.debug(
+              "👋 EDGE DETECTION: Too far from edge, stopping auto-scroll",
+              {
+                distanceFromEdge,
+                direction,
+                threshold: edgeThreshold,
+                viewType,
+              }
+            );
+
+            setAutoScrolling((prevState) => {
+              if (prevState.active) {
+                return {
+                  active: false,
+                  direction: null,
+                  speed: 0,
+                };
+              }
+              return prevState;
+            });
+          }
+          return;
+        }
+
+        // Si el scroll paginado está activado, realizar un scroll de página
+        if (pagingScrollEnabled) {
+          // Si ya estamos en modo autoscroll, no iniciar otro scroll
+          if (autoScrolling.active) {
+            return;
+          }
+
+          // Calcular la posición actual del scroll en términos de hora
+          const currentHour =
+            scrollPosition.y / (HOUR_HEIGHT * zoomLevel) + timeRange.start;
+
+          // Calcular nueva posición según la dirección
+          let targetHour;
+          if (direction === "up") {
+            // Scroll hacia arriba (horas anteriores)
+            targetHour = Math.max(
+              timeRange.start,
+              currentHour - pagingScrollHours
+            );
+          } else {
+            // Scroll hacia abajo (horas posteriores)
+            targetHour = Math.min(
+              timeRange.end,
+              currentHour + pagingScrollHours
+            );
+          }
+
+          // Convertir hora a posición en píxeles
+          const targetPosition =
+            (targetHour - timeRange.start) * HOUR_HEIGHT * zoomLevel;
+
+          logger.debug("🔄 PAGING SCROLL", {
+            direction,
+            currentHour: currentHour.toFixed(1),
+            targetHour: targetHour.toFixed(1),
+            pagingScrollHours,
+            currentPosition: scrollPosition.y.toFixed(1),
+            targetPosition: targetPosition.toFixed(1),
+            viewType,
+          });
+
+          // Realizar el scroll con animación
+          scrollTo({ y: targetPosition, animated: true });
+
+          // No activamos autoScrolling porque este es un scroll único
+          return;
+        }
+
+        // Si llegamos aquí, el scroll paginado está desactivado, usamos el scroll continuo anterior
+
+        // Improved scroll speed calculation with non-linear acceleration
+        const maxScrollSpeed = 8;
+        let scrollSpeed;
+
+        if (distanceFromEdge < 20) {
+          scrollSpeed = maxScrollSpeed;
+        } else {
+          // Smoother curve for acceleration
+          const normalizedDistance = distanceFromEdge / edgeThreshold;
+          scrollSpeed = maxScrollSpeed * Math.pow(1 - normalizedDistance, 2);
+        }
+
+        // Ensure minimum speed and round for consistency
+        scrollSpeed = Math.max(1, Math.round(scrollSpeed));
+
+        // Update auto-scrolling state with functional update pattern
+        setAutoScrolling((prevState) => {
+          // Only update if state is changing to avoid unnecessary renders
+          if (
+            !prevState.active ||
+            prevState.direction !== direction ||
+            prevState.speed !== scrollSpeed
+          ) {
+            return {
+              active: true,
+              direction: direction,
+              speed: scrollSpeed,
+            };
+          }
+          return prevState;
+        });
+
+        logger.debug("👉 EDGE DETECTED:", {
+          direction,
+          distanceFromEdge: distanceFromEdge.toFixed(1),
+          scrollSpeed,
+          scrollPosition: scrollPosition.y.toFixed(1),
+          viewHeight: scrollViewHeight,
+          normalizedDistance: (distanceFromEdge / edgeThreshold).toFixed(2),
+          viewType,
+          pagingScrollEnabled,
+        });
+      } catch (error: any) {
+        logger.error("❌ EDGE DETECTION ERROR", {
+          error: error.message,
+          viewType,
+          direction,
+          distanceFromEdge,
+        });
+      }
+    },
+    [
+      scrollPosition.y,
+      scrollViewHeight,
+      autoScrolling.active,
+      viewType,
+      dates,
+      HOUR_HEIGHT,
+      zoomLevel,
+      timeRange,
+      scrollTo,
+      calendarConfig,
+      logger,
+    ]
+  );
+
+  // Función para crear un evento usando arrastre
+  const createEventWithDrag = useCallback(
+    (start: Date, end: Date, dayIndex: number) => {
+      if (!newEventCoords || !onEventCreate) return;
+
+      // Ensure end time is after start time
+      if (end <= start) {
+        end = new Date(start);
+        end.setHours(start.getHours() + 1);
+      }
+
+      // Create event object
+      const newEvent: CalendarEvent = {
+        id: `temp-event-${Date.now()}`,
+        title: "Nuevo evento",
+        start,
+        end,
+        color:
+          theme.eventColors[
+            Math.floor(Math.random() * theme.eventColors.length)
+          ],
+      };
+
+      // Call the callback
+      logger.debug("Creating event with drag", newEvent);
+      onEventCreate(newEvent);
+
+      // Reset coordinates
+      setNewEventCoords(null);
+    },
+    [newEventCoords, onEventCreate, theme.eventColors, logger]
+  );
+
+  // Ahora todos los useEffect
+  // Set up auto-scrolling effect with safety checks for day view
+  useEffect(() => {
+    // Safety check - if not active, don't proceed
+    if (!autoScrolling.active || !autoScrolling.direction) {
+      return;
+    }
+
+    // Safety check - if the component is unmounting or event is no longer being dragged
+    if (!isResizingEvent) {
+      logger.debug("Auto-scroll cancelled because dragging stopped", {
+        viewType,
+        isResizingEvent,
+      });
+      setAutoScrolling((prevState) => {
+        if (prevState.active) {
+          return {
+            active: false,
+            direction: null,
+            speed: 0,
+          };
+        }
+        return prevState;
+      });
+      return;
+    }
+
+    // Safety check - if dates array is empty or invalid, don't proceed
+    if (!dates || !Array.isArray(dates) || dates.length === 0) {
+      logger.error("❌ AUTO-SCROLL ERROR: Invalid dates array", {
+        datesLength: dates?.length || 0,
+        viewType,
+      });
+      // Disable auto-scrolling to prevent crashes
+      setAutoScrolling((prevState) => {
+        if (prevState.active) {
+          return {
+            active: false,
+            direction: null,
+            speed: 0,
+          };
+        }
+        return prevState;
+      });
+      return;
+    }
+
+    // Calculate scroll limits based on timeRange
+    const startHour = Math.max(0, timeRange.start - 1); // One hour before available start
+    const endHour = timeRange.end + 1; // One hour after available end
+
+    // Calculate min and max scroll positions
+    const minScrollY = 0; // Never scroll above 0
+    const maxScrollY = (endHour - startHour) * HOUR_HEIGHT * zoomLevel;
+
+    // Track last frame time for smooth animation
+    let lastTimestamp = 0;
+    let animationFrameId: number | null = null;
+    let frameCount = 0;
+    let isMounted = true; // Track if component is still mounted
+
+    // Use requestAnimationFrame for smoother scrolling
+    const scrollFrame = (timestamp: number) => {
+      try {
+        // Check if component is still mounted
+        if (!isMounted) return;
+
+        frameCount++;
+
+        // Verificar si el arrastre ha terminado
+        if (!isResizingEvent || !autoScrolling.active) {
+          logger.debug("🛑 Auto-scroll frame cancelled", {
+            isResizingEvent,
+            autoScrollActive: autoScrolling.active,
+            frame: frameCount,
+          });
+          return; // No continuar con la animación
+        }
+
+        // Calculate delta time for smoother animation
+        const deltaTime = lastTimestamp ? (timestamp - lastTimestamp) / 16 : 1; // normalize to ~60fps
+        lastTimestamp = timestamp;
+
+        // Safety check - make sure scroll position is valid
+        if (typeof scrollPosition.y !== "number") {
+          throw new Error("Invalid scroll position");
+        }
+
+        // Get current scroll position
+        const currentY = scrollPosition.y;
+
+        // Calculate scroll delta with easing
+        let delta =
+          autoScrolling.direction === "up"
+            ? -autoScrolling.speed
+            : autoScrolling.speed;
+
+        // Apply deltaTime for consistent speed regardless of frame rate
+        delta = delta * deltaTime;
+
+        // Calculate new position with limits
+        const newY = Math.max(
+          minScrollY,
+          Math.min(currentY + delta, maxScrollY)
+        );
+
+        // Only update if position changed and scroll function exists
+        if (newY !== currentY && typeof scrollTo === "function") {
+          scrollTo({ y: newY, animated: false });
+
+          // Log every ~30 frames for debugging
+          if (Math.random() < 0.03) {
+            logger.debug("🔄 AUTO-SCROLL UPDATE:", {
+              viewType,
+              frame: frameCount,
+              direction: autoScrolling.direction,
+              deltaTime: deltaTime.toFixed(2),
+              currentPosition: currentY.toFixed(1),
+              delta: delta.toFixed(2),
+              newPosition: newY.toFixed(1),
+              isResizingEvent,
+              visibleHours: {
+                top: (currentY / (HOUR_HEIGHT * zoomLevel) + startHour).toFixed(
+                  1
+                ),
+                bottom: (
+                  (currentY + (scrollViewHeight || 0)) /
+                    (HOUR_HEIGHT * zoomLevel) +
+                  startHour
+                ).toFixed(1),
+              },
+              boundaries: {
+                hitTop: newY <= minScrollY,
+                hitBottom: newY >= maxScrollY,
+              },
+            });
+          }
+        }
+
+        // Continue animation ONLY if still active AND dragging AND mounted
+        if (autoScrolling.active && isResizingEvent && isMounted) {
+          animationFrameId = requestAnimationFrame(scrollFrame);
+        } else {
+          logger.debug("🚫 Auto-scroll animation stopped", {
+            autoScrollActive: autoScrolling.active,
+            isResizingEvent,
+            frame: frameCount,
+            isMounted,
+          });
+        }
+      } catch (error: any) {
+        // Log error and stop animation to prevent crash
+        logger.error("❌ AUTO-SCROLL ERROR", {
+          error: error.message,
+          viewType,
+          autoScrolling,
+          isResizingEvent,
+          scrollPosition:
+            typeof scrollPosition === "object"
+              ? JSON.stringify(scrollPosition)
+              : String(scrollPosition),
+        });
+
+        // Stop auto-scrolling
+        if (isMounted) {
+          setAutoScrolling((prevState) => {
+            if (prevState.active) {
+              return {
+                active: false,
+                direction: null,
+                speed: 0,
+              };
+            }
+            return prevState;
+          });
+        }
+      }
+    };
+
+    // Start animation
+    animationFrameId = requestAnimationFrame(scrollFrame);
+
+    logger.debug("🚀 AUTO-SCROLL STARTED", {
+      direction: autoScrolling.direction,
+      speed: autoScrolling.speed,
+      timeRange: { start: startHour, end: endHour },
+      viewType,
+    });
+
+    // Cleanup on unmount or when scrolling stops
+    return () => {
+      isMounted = false;
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+        logger.debug("🛑 AUTO-SCROLL STOPPED", {
+          framesExecuted: frameCount,
+          finalPosition: scrollPosition?.y?.toFixed(1) || "unknown",
+          viewType,
+        });
+      }
+    };
+  }, [
+    autoScrolling,
+    scrollPosition.y,
+    scrollTo,
+    timeRange,
+    zoomLevel,
+    HOUR_HEIGHT,
+    scrollViewHeight,
+    viewType,
+    dates,
+    isResizingEvent,
+    logger,
+  ]);
+
+  // Scroll to current time on first render
+  useEffect(() => {
+    if (nowIndicatorPosition) {
+      const position = Math.max(0, nowIndicatorPosition - 100);
+      logger.debug("Scrolling to current time", { position });
+
+      // Use setTimeout to ensure component is mounted
+      setTimeout(() => {
+        scrollTo({ y: position, animated: true });
+      }, 500);
+    }
+  }, [nowIndicatorPosition, viewType, selectedDate, scrollTo, logger]);
+
+  // Actualizar el scroll cada minuto para seguir la línea de tiempo actual
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+
+      if (
+        hours >= timeRange.start &&
+        hours <= timeRange.end &&
+        isToday(dates[0])
+      ) {
+        const position =
+          (hours - timeRange.start + minutes / 60) * HOUR_HEIGHT * zoomLevel;
+        const scrollPosition = Math.max(0, position - 100); // Centrar un poco por encima
+
+        logger.debug("Auto-scrolling to current time", { scrollPosition });
+        scrollTo({ y: scrollPosition, animated: true });
+      }
+    }, 60000); // Cada minuto
+
+    return () => clearInterval(interval);
+  }, [
+    timeRange,
+    zoomLevel,
+    dates,
+    selectedDate,
+    scrollTo,
+    HOUR_HEIGHT,
+    logger,
+  ]);
+
+  // Efecto para detectar cambios en eventos y forzar recálculo
+  // Use a ref to store previous events for comparison
+  const prevEventsRef = useRef<CalendarEvent[]>([]);
+
+  // Efecto para detectar cambios en eventos y forzar recálculo
+  useEffect(() => {
+    // Check if events have actually changed in a meaningful way
+    const hasEventsChanged = () => {
+      // Quick check: different length means events changed
+      if (prevEventsRef.current.length !== events.length) {
+        return true;
+      }
+
+      // Check if any event has changed by comparing essential properties
+      for (let i = 0; i < events.length; i++) {
+        const current = events[i];
+        const prev = prevEventsRef.current[i];
+
+        if (
+          current.id !== prev.id ||
+          current.start.getTime() !== prev.start.getTime() ||
+          current.end.getTime() !== prev.end.getTime() ||
+          current.title !== prev.title
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    // Only update refreshKey if events have actually changed
+    if (hasEventsChanged()) {
+      // Store current events for next comparison
+      prevEventsRef.current = [...events];
+
+      // Incrementar la key para forzar el recálculo de posiciones
+      setRefreshKey((prev) => prev + 1);
+      logger.debug("Events actually changed, forcing recalculation", {
+        eventCount: events.length,
+        refreshKey: refreshKey + 1,
+      });
+    }
+  }, [events, logger]);
+
+  // Efecto para hacer debug del refreshKey (keep this for debugging)
+  useEffect(() => {
+    logger.debug("Refresh triggered", { refreshKey });
+  }, [refreshKey, logger]);
+
+  // Function to convert y coordinate to time
+  const yToTime = useCallback(
+    (y: number): { hour: number; minutes: number } => {
+      // Adjust for zoom level
+      const adjustedY = y / zoomLevel;
+
+      // Calculate total minutes from timeRange.start
+      const totalMinutesFromRangeStart = (adjustedY / HOUR_HEIGHT) * 60;
+
+      // Calculate total minutes from midnight
+      const minutesFromMidnight =
+        timeRange.start * 60 + totalMinutesFromRangeStart;
+
+      // Snap to the nearest timeInterval
+      const snappedMinutesFromMidnight =
+        Math.round(minutesFromMidnight / timeInterval) * timeInterval;
+
+      // Convert back to hours and minutes
+      const hour = Math.floor(snappedMinutesFromMidnight / 60);
+      const minutes = snappedMinutesFromMidnight % 60;
+
+      logger.debug("Time conversion from y-coordinate", {
+        y,
+        adjustedY,
+        totalMinutesFromRangeStart,
+        minutesFromMidnight,
+        snappedMinutesFromMidnight,
+        hour,
+        minutes,
+        timeInterval,
+      });
+
+      return { hour, minutes };
+    },
+    [HOUR_HEIGHT, timeInterval, timeRange.start, zoomLevel, logger]
+  );
+
+  // Check if a specific time slot is unavailable
+  const isTimeSlotUnavailable = useCallback(
+    (date: Date, hour: number, minute: number): boolean => {
+      if (!unavailableHours) return false;
+
+      // Get day of week (0 = Sunday, 1 = Monday, etc.)
+      const dayOfWeek = date.getDay();
+
+      // Check if this day is included in unavailable days
+      const daysToCheck = unavailableHours.days || [0, 1, 2, 3, 4, 5, 6]; // Default to all days
+      if (!daysToCheck.includes(dayOfWeek)) return false;
+
+      // Create a decimal time value (e.g. 9.5 for 9:30)
+      const timeValue = hour + minute / 60;
+
+      // Check if time falls within any unavailable range
+      return unavailableHours.ranges.some(
+        (range) => timeValue >= range.start && timeValue < range.end
+      );
+    },
+    [unavailableHours]
+  );
+
+  // Helper function to check if a date is a weekend
+  const isWeekend = useCallback((date: Date) => {
+    const day = date.getDay();
+    return day === 0 || day === 6; // 0 is Sunday, 6 is Saturday
+  }, []);
+
+  // Handle time slot press, checking for unavailability
+  const handleTimeSlotPress = useCallback(
+    (dayIndex: number, hour: number, minutes: number) => {
+      if (isResizingEvent || !onTimeSlotPress) return;
+
+      // Don't create event if already creating one
+      if (newEventCoords?.isCreating) return;
+
+      // Create start and end dates
+      const date = dates[dayIndex];
+
+      // Check if the time slot is unavailable
+      if (isTimeSlotUnavailable(date, hour, minutes)) {
+        logger.debug("Time slot is unavailable", { date, hour, minutes });
+        return; // Don't allow interaction with unavailable time slots
+      }
+
+      const start = new Date(date);
+      start.setHours(hour, minutes, 0, 0);
+
+      // End time is 1 hour after start by default
+      const end = new Date(start);
+      end.setHours(hour + 1, minutes, 0, 0);
+
+      // Call the callback
+      logger.debug("Time slot pressed", { start, end });
+      onTimeSlotPress(start, end);
+    },
+    [
+      isResizingEvent,
+      onTimeSlotPress,
+      newEventCoords,
+      dates,
+      isTimeSlotUnavailable,
+      logger,
+    ]
+  );
+
+  // Función para resaltar la zona de destino durante el arrastre
+  const highlightDropZone = useCallback(
+    (dayIndex: number, hour: number, minute: number) => {
+      if (isResizingEvent) {
+        logger.debug("Resaltando zona de destino", {
+          dayIndex,
+          date: dates[dayIndex].toLocaleDateString(),
+          hour,
+          minute,
+          fullTime: `${hour}:${minute.toString().padStart(2, "0")}`,
+          isResizingEvent,
+        });
+
+        setDragTarget({ dayIndex, hour, minute });
+      } else {
+        setDragTarget(null);
+      }
+    },
+    [isResizingEvent, dates, logger]
+  );
+
+  // Añadir la definición de positionEventsWithOverlap antes de renderEvents
+  const positionEventsWithOverlap = useCallback(
+    (
+      dayEvents: CalendarEvent[]
+    ): Array<CalendarEvent & { left: number; width: number }> => {
+      if (!dayEvents.length) return [];
+
+      // Ordenar eventos por hora de inicio y luego por duración
+      const sortedEvents = [...dayEvents].sort((a, b) => {
+        const startDiff = a.start.getTime() - b.start.getTime();
+        if (startDiff !== 0) return startDiff;
+
+        // Si la hora de inicio es la misma, ordenar por duración (más corta primero)
+        return (
+          a.end.getTime() -
+          a.start.getTime() -
+          (b.end.getTime() - b.start.getTime())
+        );
+      });
+
+      // Utilizamos el algoritmo de agrupación mejorado de utils
+      const overlapGroups = groupOverlappingEvents(sortedEvents);
+
+      // Calcular posición y ancho para cada evento
+      const positionedEvents: Array<
+        CalendarEvent & { left: number; width: number }
+      > = [];
+
+      overlapGroups.forEach((group) => {
+        if (group.length === 1) {
+          // Si solo hay un evento en el grupo, ocupa todo el ancho
+          positionedEvents.push({
+            ...group[0],
+            left: 5,
+            width: columnWidth - 10,
+          });
+          return;
+        }
+
+        // Para grupos con múltiples eventos, necesitamos resolver colisiones
+        // Paso 1: Crear una matriz de colisiones
+        const collisionMatrix: boolean[][] = [];
+        for (let i = 0; i < group.length; i++) {
+          collisionMatrix[i] = [];
+          for (let j = 0; j < group.length; j++) {
+            if (i === j) {
+              collisionMatrix[i][j] = false;
+              continue;
+            }
+
+            // Verificar colisiones entre eventos
+            const eventA = group[i];
+            const eventB = group[j];
+
+            // Un evento se solapa con otro si comparten algún intervalo de tiempo
+            collisionMatrix[i][j] = eventsOverlap(eventA, eventB);
+          }
+        }
+
+        // Paso 2: Asignar columnas a los eventos usando un algoritmo más eficiente
+        const eventColumns: number[] = Array(group.length).fill(-1);
+        const maxColumnsPerEvent: number[] = Array(group.length).fill(1);
+
+        // Primero, asignar columnas basadas en colisiones
+        for (let i = 0; i < group.length; i++) {
+          // Obtener todas las columnas ya ocupadas por eventos que se solapan con este
+          const usedColumns = new Set<number>();
+          for (let j = 0; j < i; j++) {
+            if (collisionMatrix[i][j] && eventColumns[j] !== -1) {
+              usedColumns.add(eventColumns[j]);
+            }
+          }
+
+          // Encontrar la primera columna disponible
+          let column = 0;
+          while (usedColumns.has(column)) {
+            column++;
+          }
+
+          eventColumns[i] = column;
+        }
+
+        // Identificar el número máximo de columnas necesarias
+        const maxColumn = Math.max(...eventColumns);
+        // Usar MAX_COLUMNS del overlapConfig para limitar el número de columnas
+        const maxAllowedColumns = overlapConfig.MAX_COLUMNS;
+        const totalColumns = Math.min(maxColumn + 1, maxAllowedColumns);
+
+        // Paso 3: Calcular ancho y posición para cada evento
+        // Definir márgenes y espaciado
+        const marginLeft = 2;
+        const marginRight = 2;
+        const marginBetween = 1; // Espacio reducido entre eventos
+
+        // Calcular ancho disponible para todos los eventos en esta columna
+        const availableWidth = columnWidth - (marginLeft + marginRight);
+
+        // Ancho base para cada columna
+        const columnBaseWidth = availableWidth / totalColumns;
+
+        // Determinar el ancho mínimo para cada evento
+        const minEventWidth = Math.min(35, columnBaseWidth); // Permitir eventos más estrechos cuando hay muchas columnas
+
+        // Asignar anchos y posiciones
+        for (let i = 0; i < group.length; i++) {
+          // Calcular posición izquierda base
+          const leftPosition = marginLeft + eventColumns[i] * columnBaseWidth;
+
+          // Establecer márgenes mínimos y máximos para mantener los eventos dentro de la columna
+          const startMargin = marginLeft + (eventColumns[i] === 0 ? 2 : 0);
+          const endMargin =
+            marginRight + (eventColumns[i] === maxColumn ? 2 : 0);
+
+          // Calcular ancho disponible para este evento en su posición
+          const maxWidthAtPosition = columnWidth - leftPosition - endMargin;
+
+          // Calcular ancho base ajustado al número de columnas
+          const baseWidth = Math.max(
+            columnBaseWidth - marginBetween,
+            minEventWidth
+          );
+
+          // Asegurar que el ancho no exceda el espacio disponible
+          const constrainedWidth = Math.min(baseWidth, maxWidthAtPosition);
+
+          // Mantener un ancho mínimo legible
+          const width = Math.max(constrainedWidth, minEventWidth);
+
+          // Ajustar la posición izquierda para asegurarnos de que no se sale de la columna
+          const maxLeftPosition = columnWidth - width - endMargin;
+          const adjustedLeft = Math.min(leftPosition, maxLeftPosition);
+
+          // Si el evento está en la última columna o es muy estrecho, darle un poco más de espacio
+          let finalWidth = width;
+          if (
+            (width < 40 && totalColumns <= 3) ||
+            eventColumns[i] === maxColumn
+          ) {
+            // Intentar expandir un poco los eventos pequeños, sin exceder límites
+            const expandedWidth = width * 1.1;
+            if (adjustedLeft + expandedWidth <= columnWidth - endMargin) {
+              finalWidth = expandedWidth;
+            }
+          }
+
+          positionedEvents.push({
+            ...group[i],
+            left: adjustedLeft,
+            width: finalWidth,
+          });
+        }
+      });
+
+      return positionedEvents;
+    },
+    [columnWidth, overlapConfig.MAX_COLUMNS]
+  );
+
+  // Add a memoized version of getEventPositionExact
+  const getMemoizedEventPosition = useCallback(
+    (
+      event: CalendarEvent,
+      startHour: number,
+      endHour: number,
+      hourHeight: number
+    ) => {
+      return getEventPositionExact(event, startHour, endHour, hourHeight);
+    },
+    [] // This doesn't need dependencies since it's just a wrapper
+  );
 
   // Render time labels (left column)
   const renderTimeLabels = () => (
@@ -866,13 +1344,13 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
   // Function to render the snap line indicator during drag
   const renderSnapLineIndicator = () => {
-    if (!snapLineIndicator || !snapLineIndicator.visible) {
+    if (!effectiveSnapLineIndicator || !effectiveSnapLineIndicator.visible) {
       return null;
     }
 
     // Calculate position based on the time
-    const hours = snapLineIndicator.time.getHours();
-    const minutes = snapLineIndicator.time.getMinutes();
+    const hours = effectiveSnapLineIndicator.time.getHours();
+    const minutes = effectiveSnapLineIndicator.time.getMinutes();
 
     // Calculate position from time
     let position = 0;
@@ -887,7 +1365,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           styles.snapLineIndicator,
           {
             top: position,
-            borderColor: snapLineIndicator.color,
+            borderColor: effectiveSnapLineIndicator.color,
           },
         ]}
       />
@@ -998,11 +1476,111 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     );
   };
 
-  // Helper function to check if a date is a weekend
-  const isWeekend = (date: Date) => {
-    const day = date.getDay();
-    return day === 0 || day === 6; // 0 is Sunday, 6 is Saturday
-  };
+  // Update renderEvents to use the memoized function
+  const renderEvents = useCallback(
+    (dayIndex: number) => {
+      // Filtrar eventos para este día
+      const date = dates[dayIndex];
+      const allEvents = filterEventsByDay(events, date);
+
+      // Log only basic info to reduce overhead
+      logger.debug(`Rendering events for day ${dayIndex}`, {
+        date: date.toISOString(),
+        eventCount: allEvents.length,
+      });
+
+      if (allEvents.length === 0) return null;
+
+      // Calcular posición y dimensiones para cada evento
+      const positionedEvents = positionEventsWithOverlap(allEvents);
+
+      // Reduce logging detail level
+      if (positionedEvents.length > 0) {
+        logger.debug(
+          `Positioned ${positionedEvents.length} events for day ${dayIndex}`
+        );
+      }
+
+      return (
+        <>
+          {positionedEvents.map(
+            (item: CalendarEvent & { left: number; width: number }) => {
+              // Use the memoized position calculation function
+              const { top, height } = getMemoizedEventPosition(
+                item,
+                timeRange.start,
+                timeRange.end,
+                HOUR_HEIGHT * zoomLevel
+              );
+
+              // Significantly reduce per-event logging
+              // Only log on every 5th event to reduce overhead
+              if (Math.random() < 0.2) {
+                logger.debug(`Event position: ${item.id}`, {
+                  title: item.title,
+                  top,
+                  height,
+                });
+              }
+
+              // Add a function to handle event drag with snap time
+              const handleEventDragWithSnap = (
+                event: CalendarEvent,
+                minuteDiff: number,
+                snapTime: Date
+              ): boolean => {
+                // Call the provided onEventDrag handler with the snap time
+                if (onEventDrag) {
+                  return onEventDrag(event, minuteDiff, snapTime);
+                }
+                return true;
+              };
+
+              // Use a stable key that doesn't depend on refreshKey if possible
+              const eventKey = `${
+                item.id
+              }-${item.start.getTime()}-${item.end.getTime()}`;
+
+              return (
+                <Event
+                  key={eventKey}
+                  event={item}
+                  top={top}
+                  left={item.left}
+                  width={item.width}
+                  height={height}
+                  isResizing={isResizingEvent}
+                  setIsResizing={setIsResizingEvent}
+                  onEventDragWithSnap={handleEventDragWithSnap}
+                  onEventDragEnd={handleEventDragEnd}
+                  onDragNearEdge={handleDragNearEdge}
+                  viewHeight={scrollViewHeight}
+                  scrollPosition={scrollPosition}
+                />
+              );
+            }
+          )}
+        </>
+      );
+    },
+    [
+      dates,
+      events,
+      positionEventsWithOverlap,
+      timeRange.start,
+      timeRange.end,
+      HOUR_HEIGHT,
+      zoomLevel,
+      isResizingEvent,
+      onEventDrag,
+      handleEventDragEnd,
+      handleDragNearEdge,
+      scrollViewHeight,
+      scrollPosition,
+      logger,
+      getMemoizedEventPosition,
+    ]
+  );
 
   // Main render
   return (
@@ -1018,6 +1596,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
               minHeight: "100%",
             },
           ]}
+          onLayout={handleScrollViewLayout}
           onScrollEndDrag={() => {
             // Ayuda a mantener el rastreo de la posición actual de desplazamiento
             logger.debug("Scroll end drag");

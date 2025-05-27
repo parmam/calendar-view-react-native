@@ -74,6 +74,8 @@ export type HapticOptions = {
 export type DragPreviewConfig = {
   previewOffset: number; // Offset in pixels for the drag preview from the event being moved
   connectionLineWidth?: number; // Width of the connection line between original event and preview
+  pagingScrollHours?: number; // Number of hours to scroll when reaching edge (default: 3)
+  enablePagingScroll?: boolean; // Whether to use paging scroll instead of continuous scroll (default: true)
 };
 
 export type CalendarConfig = {

@@ -29,6 +29,9 @@ interface EventProps {
     snapTime: Date
   ) => boolean;
   onEventDragEnd?: () => void;
+  onDragNearEdge?: (distanceFromEdge: number, direction: "up" | "down") => void;
+  viewHeight?: number;
+  scrollPosition: { x: number; y: number };
 }
 
 const Event: React.FC<EventProps> = ({
@@ -41,6 +44,9 @@ const Event: React.FC<EventProps> = ({
   setIsResizing,
   onEventDragWithSnap,
   onEventDragEnd,
+  onDragNearEdge,
+  viewHeight,
+  scrollPosition,
 }) => {
   // Initialize logger
   const logger = useLogger("Event");
@@ -73,6 +79,7 @@ const Event: React.FC<EventProps> = ({
     calendarConfig,
     timeInterval,
     showTimeChangeConfirmation,
+    viewType,
   } = useCalendar();
   const [eventHeight, setEventHeight] = useState(height);
   const [isPressed, setIsPressed] = useState(false);
@@ -227,6 +234,79 @@ const Event: React.FC<EventProps> = ({
         // Update position - Only use vertical movement (dy)
         translateY.setValue(gestureState.dy);
 
+        // Calculate current position in the view
+        const currentPositionY = top + gestureState.dy;
+        const absolutePositionY = currentPositionY + scrollPosition.y;
+
+        // Check if we're near the edges and should trigger auto-scrolling
+        if (viewHeight && onDragNearEdge) {
+          // Distance from top edge
+          const distanceFromTop = absolutePositionY;
+
+          // Distance from bottom edge
+          const distanceFromBottom =
+            viewHeight - (absolutePositionY + eventHeight);
+
+          // Edge detection threshold (in pixels)
+          const edgeThreshold = 100;
+
+          // Log edge proximity info (reduce frecuencia de logs)
+          if (Math.abs(gestureState.dy) > 20 && Math.random() < 0.03) {
+            logger.debug("📏 EVENT DRAG POSITION:", {
+              eventId: event.id,
+              eventTitle: event.title,
+              top: top.toFixed(1),
+              dy: gestureState.dy.toFixed(1),
+              currentPosition: currentPositionY.toFixed(1),
+              absolutePosition: absolutePositionY.toFixed(1),
+              scrollPosition: scrollPosition.y.toFixed(1),
+              viewHeight,
+              distanceFromTop: distanceFromTop.toFixed(1),
+              distanceFromBottom: distanceFromBottom.toFixed(1),
+              nearTopEdge: distanceFromTop < edgeThreshold,
+              nearBottomEdge: distanceFromBottom < edgeThreshold,
+              pagingScrollEnabled:
+                calendarConfig?.dragPreviewConfig?.enablePagingScroll,
+            });
+          }
+
+          // Check if we're near the top edge
+          if (distanceFromTop < edgeThreshold) {
+            // Si estamos usando scroll paginado, necesitamos un trigger más agresivo
+            // porque el scrolleo ocurrirá de una vez, no continuamente
+            const pagingScrollEnabled =
+              calendarConfig?.dragPreviewConfig?.enablePagingScroll;
+            const triggerThreshold = pagingScrollEnabled ? edgeThreshold : 50;
+
+            if (distanceFromTop < triggerThreshold) {
+              logger.debug("⬆️ NEAR TOP EDGE:", {
+                eventId: event.id,
+                distance: distanceFromTop.toFixed(1),
+                threshold: edgeThreshold,
+                pagingScrollEnabled,
+              });
+              onDragNearEdge(distanceFromTop, "up");
+            }
+          }
+          // Check if we're near the bottom edge
+          else if (distanceFromBottom < edgeThreshold) {
+            // Igual que arriba, usamos un trigger más agresivo para scroll paginado
+            const pagingScrollEnabled =
+              calendarConfig?.dragPreviewConfig?.enablePagingScroll;
+            const triggerThreshold = pagingScrollEnabled ? edgeThreshold : 50;
+
+            if (distanceFromBottom < triggerThreshold) {
+              logger.debug("⬇️ NEAR BOTTOM EDGE:", {
+                eventId: event.id,
+                distance: distanceFromBottom.toFixed(1),
+                threshold: edgeThreshold,
+                pagingScrollEnabled,
+              });
+              onDragNearEdge(distanceFromBottom, "down");
+            }
+          }
+        }
+
         // Constante para conversión de píxeles a minutos
         const pixelsPerMinute = HOUR_HEIGHT / 60; // 1 pixel por minuto si HOUR_HEIGHT es 60
 
@@ -301,164 +381,225 @@ const Event: React.FC<EventProps> = ({
         }
       },
       onPanResponderRelease: (e, gestureState) => {
-        // Reset the animation
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 100,
-          useNativeDriver: true,
-        }).start();
+        try {
+          // Llamar al drag end handler inmediatamente para parar cualquier autoscroll
+          if (onEventDragEnd) {
+            onEventDragEnd();
+          }
 
-        setIsPressed(false);
-        setPreviewPosition(null);
-        setIsTargetUnavailable(false);
+          // Reset the animation
+          Animated.timing(scaleAnim, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true,
+          }).start();
 
-        // Handle the event update
-        if (Math.abs(gestureState.dy) > 10) {
-          // Calculate minutes using the same grid-snapping logic as in onPanResponderMove
-          const pixelsPerMinute = HOUR_HEIGHT / 60;
-          const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
+          setIsPressed(false);
+          setPreviewPosition(null);
+          setIsTargetUnavailable(false);
 
-          // Get original minutes from midnight
-          const originalMinutesFromMidnight =
-            event.start.getHours() * 60 + event.start.getMinutes();
+          // Handle the event update
+          if (Math.abs(gestureState.dy) > 10) {
+            // Calculate minutes using the same grid-snapping logic as in onPanResponderMove
+            const pixelsPerMinute = HOUR_HEIGHT / 60;
+            const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
 
-          // Calculate new total minutes
-          const newMinutesFromMidnight =
-            originalMinutesFromMidnight + exactMinuteDiff;
+            // Get original minutes from midnight
+            const originalMinutesFromMidnight =
+              event.start.getHours() * 60 + event.start.getMinutes();
 
-          // Snap to nearest timeInterval grid point
-          const snappedMinutesFromMidnight =
-            Math.round(newMinutesFromMidnight / timeInterval) * timeInterval;
+            // Calculate new total minutes
+            const newMinutesFromMidnight =
+              originalMinutesFromMidnight + exactMinuteDiff;
 
-          // Calculate the final minute difference that maintains the timeInterval grid
-          const minuteDiff =
-            snappedMinutesFromMidnight - originalMinutesFromMidnight;
+            // Snap to nearest timeInterval grid point
+            const snappedMinutesFromMidnight =
+              Math.round(newMinutesFromMidnight / timeInterval) * timeInterval;
 
-          if (minuteDiff !== 0) {
-            // Create new date objects to avoid modifying the original
-            const newStart = new Date(event.start);
-            const newEnd = new Date(event.end);
+            // Calculate the final minute difference that maintains the timeInterval grid
+            const minuteDiff =
+              snappedMinutesFromMidnight - originalMinutesFromMidnight;
 
-            // Calculate duration in minutes
-            const durationMinutes =
-              event.end.getHours() * 60 +
-              event.end.getMinutes() -
-              (event.start.getHours() * 60 + event.start.getMinutes());
+            if (minuteDiff !== 0) {
+              // Create new date objects to avoid modifying the original
+              const newStart = new Date(event.start);
+              const newEnd = new Date(event.end);
 
-            // Set the start time to the snapped time
-            newStart.setHours(
-              Math.floor(snappedMinutesFromMidnight / 60),
-              snappedMinutesFromMidnight % 60,
-              0,
-              0
-            );
+              // Calculate duration in minutes
+              const durationMinutes =
+                event.end.getHours() * 60 +
+                event.end.getMinutes() -
+                (event.start.getHours() * 60 + event.start.getMinutes());
 
-            // Set the end time based on the original duration
-            const endMinutesFromMidnight =
-              snappedMinutesFromMidnight + durationMinutes;
-            newEnd.setHours(
-              Math.floor(endMinutesFromMidnight / 60),
-              endMinutesFromMidnight % 60,
-              0,
-              0
-            );
-
-            // Ensure the day is preserved (only change time)
-            newStart.setFullYear(event.start.getFullYear());
-            newStart.setMonth(event.start.getMonth());
-            newStart.setDate(event.start.getDate());
-
-            newEnd.setFullYear(event.end.getFullYear());
-            newEnd.setMonth(event.end.getMonth());
-            newEnd.setDate(event.end.getDate());
-
-            logger.debug("Finalizando arrastre de evento", {
-              eventId: event.id,
-              minuteDiff,
-              originalStart: event.start.toLocaleTimeString(),
-              originalStartDate: event.start.toLocaleDateString(),
-              originalEnd: event.end.toLocaleTimeString(),
-              newStart: newStart.toLocaleTimeString(),
-              newStartDate: newStart.toLocaleDateString(),
-              newEnd: newEnd.toLocaleTimeString(),
-              eventTitle: event.title,
-              leftPosition: left, // Aseguramos que mantenemos la misma posición left
-              originalMinutesFromMidnight,
-              snappedMinutesFromMidnight,
-              timeInterval,
-            });
-
-            // Verificar si la nueva posición está en un rango no disponible
-            if (isTimeSlotUnavailable(newStart)) {
-              // Si el destino no está disponible, aplicar feedback háptico de error
-              if (hapticOptions?.enabled && hapticOptions.error) {
-                try {
-                  require("expo-haptics").notificationAsync(
-                    require("expo-haptics").NotificationFeedbackType.Error
-                  );
-                  logger.debug("Feedback háptico de error aplicado", {
-                    eventId: event.id,
-                    reason: "hora no disponible",
-                  });
-                } catch (e) {
-                  logger.debug("Haptic feedback failed", { error: e });
-                }
-              }
-
-              // Animar de vuelta a la posición original
-              Animated.spring(translateY, {
-                toValue: 0,
-                friction: 5,
-                tension: 40,
-                useNativeDriver: true,
-              }).start();
-
-              // No actualizar si está en una zona no disponible
-              logger.debug(
-                "Reubicación de evento rechazada - horario no disponible",
-                {
-                  eventId: event.id,
-                  newStart: newStart.toLocaleTimeString(),
-                  eventTitle: event.title,
-                  dayOfWeek: newStart.getDay(),
-                  timeValue: newStart.getHours() + newStart.getMinutes() / 60,
-                }
+              // Set the start time to the snapped time
+              newStart.setHours(
+                Math.floor(snappedMinutesFromMidnight / 60),
+                snappedMinutesFromMidnight % 60,
+                0,
+                0
               );
-            } else {
-              logger.debug("Mostrando confirmación de cambio de horario", {
+
+              // Set the end time based on the original duration
+              const endMinutesFromMidnight =
+                snappedMinutesFromMidnight + durationMinutes;
+              newEnd.setHours(
+                Math.floor(endMinutesFromMidnight / 60),
+                endMinutesFromMidnight % 60,
+                0,
+                0
+              );
+
+              // Ensure the day is preserved (only change time)
+              newStart.setFullYear(event.start.getFullYear());
+              newStart.setMonth(event.start.getMonth());
+              newStart.setDate(event.start.getDate());
+
+              newEnd.setFullYear(event.end.getFullYear());
+              newEnd.setMonth(event.end.getMonth());
+              newEnd.setDate(event.end.getDate());
+
+              logger.debug("Finalizando arrastre de evento", {
                 eventId: event.id,
                 minuteDiff,
+                originalStart: event.start.toLocaleTimeString(),
+                originalStartDate: event.start.toLocaleDateString(),
+                originalEnd: event.end.toLocaleTimeString(),
                 newStart: newStart.toLocaleTimeString(),
+                newStartDate: newStart.toLocaleDateString(),
                 newEnd: newEnd.toLocaleTimeString(),
                 eventTitle: event.title,
+                leftPosition: left, // Aseguramos que mantenemos la misma posición left
+                originalMinutesFromMidnight,
+                snappedMinutesFromMidnight,
+                timeInterval,
+                viewType,
               });
 
-              // Instead of directly updating the event, show confirmation modal
-              showTimeChangeConfirmation(event, newStart, newEnd);
+              // Safety check - make sure showTimeChangeConfirmation exists
+              if (!showTimeChangeConfirmation) {
+                logger.error(
+                  "❌ Cannot show time change confirmation - function not available",
+                  {
+                    viewType,
+                    eventId: event.id,
+                  }
+                );
+
+                // Reset position smoothly
+                Animated.spring(translateY, {
+                  toValue: 0,
+                  friction: 5,
+                  tension: 40,
+                  useNativeDriver: true,
+                }).start();
+
+                setIsResizing(false);
+                return;
+              }
+
+              // Verificar si la nueva posición está en un rango no disponible
+              if (isTimeSlotUnavailable(newStart)) {
+                // Si el destino no está disponible, aplicar feedback háptico de error
+                if (hapticOptions?.enabled && hapticOptions.error) {
+                  try {
+                    require("expo-haptics").notificationAsync(
+                      require("expo-haptics").NotificationFeedbackType.Error
+                    );
+                    logger.debug("Feedback háptico de error aplicado", {
+                      eventId: event.id,
+                      reason: "hora no disponible",
+                    });
+                  } catch (e) {
+                    logger.debug("Haptic feedback failed", { error: e });
+                  }
+                }
+
+                // Animar de vuelta a la posición original
+                Animated.spring(translateY, {
+                  toValue: 0,
+                  friction: 5,
+                  tension: 40,
+                  useNativeDriver: true,
+                }).start();
+
+                // No actualizar si está en una zona no disponible
+                logger.debug(
+                  "Reubicación de evento rechazada - horario no disponible",
+                  {
+                    eventId: event.id,
+                    newStart: newStart.toLocaleTimeString(),
+                    eventTitle: event.title,
+                    dayOfWeek: newStart.getDay(),
+                    timeValue: newStart.getHours() + newStart.getMinutes() / 60,
+                  }
+                );
+              } else {
+                logger.debug("Mostrando confirmación de cambio de horario", {
+                  eventId: event.id,
+                  minuteDiff,
+                  newStart: newStart.toLocaleTimeString(),
+                  newEnd: newEnd.toLocaleTimeString(),
+                  eventTitle: event.title,
+                  viewType,
+                });
+
+                // Instead of directly updating the event, show confirmation modal
+                showTimeChangeConfirmation(event, newStart, newEnd);
+              }
+            } else {
+              logger.debug(
+                "Arrastre de evento cancelado (movimiento insuficiente)",
+                {
+                  eventId: event.id,
+                  dy: gestureState.dy,
+                  viewType,
+                }
+              );
             }
           } else {
-            logger.debug("Arrastre de evento sin cambio de posición", {
-              eventId: event.id,
-              minuteDiff,
-            });
+            logger.debug(
+              "Arrastre de evento cancelado (movimiento insuficiente)",
+              {
+                eventId: event.id,
+                dy: gestureState.dy,
+                viewType,
+              }
+            );
           }
-        } else {
-          logger.debug(
-            "Arrastre de evento cancelado (movimiento insuficiente)",
-            {
-              eventId: event.id,
+
+          // Reset translation
+          translateY.setValue(0);
+          setIsResizing(false);
+        } catch (error: any) {
+          // Critical error handling to prevent app crash
+          logger.error("❌ ERROR DURING EVENT DRAG RELEASE", {
+            error: error.message,
+            eventId: event.id,
+            viewType,
+            gestureState: {
               dy: gestureState.dy,
+              moveY: gestureState.moveY,
+              y0: gestureState.y0,
+            },
+          });
+
+          // Reset all states to recover from error
+          translateY.setValue(0);
+          setIsResizing(false);
+          setIsPressed(false);
+          setPreviewPosition(null);
+          setIsTargetUnavailable(false);
+
+          // Call drag end to ensure parent components are updated
+          if (onEventDragEnd) {
+            try {
+              onEventDragEnd();
+            } catch (innerError: any) {
+              logger.error("❌ Additional error in drag end handler", {
+                error: innerError.message,
+              });
             }
-          );
-        }
-
-        // Reset translation
-        translateY.setValue(0);
-        setIsResizing(false);
-
-        // Call the drag end handler if provided
-        if (onEventDragEnd) {
-          onEventDragEnd();
+          }
         }
       },
     })
@@ -512,26 +653,40 @@ const Event: React.FC<EventProps> = ({
 
   // Handler for event press
   const handleEventPress = useCallback(() => {
-    logger.debug("Event pressed", { eventId: event.id });
-    onEventPress?.(event);
-    setIsPressed(true);
+    try {
+      logger.debug("Event pressed", { eventId: event.id, viewType });
 
-    // Provide visual feedback with animation
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 1.1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
+      if (onEventPress) {
+        onEventPress(event);
+      }
+
+      setIsPressed(true);
+
+      // Provide visual feedback with animation
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setIsPressed(false);
+      });
+    } catch (error: any) {
+      logger.error("❌ Error handling event press", {
+        error: error.message,
+        eventId: event.id,
+        viewType,
+      });
+      // Reset state to prevent UI getting stuck
       setIsPressed(false);
-    });
-  }, [event, onEventPress, scaleAnim]);
+    }
+  }, [event, onEventPress, scaleAnim, viewType]);
 
   // Format event times
   const eventTimeText = `${formatTime(event.start, locale)} - ${formatTime(
@@ -573,16 +728,36 @@ const Event: React.FC<EventProps> = ({
     minuteDiff: number,
     snapTime: Date
   ): boolean => {
-    // Use the onEventDragWithSnap prop if provided
-    if (onEventDragWithSnap) {
-      try {
-        return onEventDragWithSnap(event, minuteDiff, snapTime);
-      } catch (error) {
-        logger.debug("Error validating event drag", { error });
-        return false;
+    try {
+      // Add debug logging for day view
+      if (viewType === "day") {
+        logger.debug("🔍 Validating event drag in day view", {
+          eventId: event.id,
+          minuteDiff,
+          viewType,
+          hasEventDragHandler: !!onEventDragWithSnap,
+        });
       }
+
+      // Safety check
+      if (!onEventDragWithSnap) {
+        logger.warn("⚠️ No event drag handler available", {
+          viewType,
+          eventId: event.id,
+        });
+        return true; // Default to allowing drag if no handler
+      }
+
+      // Use the onEventDragWithSnap prop if provided
+      return onEventDragWithSnap(event, minuteDiff, snapTime);
+    } catch (error: any) {
+      logger.error("❌ Error validating event drag", {
+        error: error.message,
+        viewType,
+        eventId: event.id,
+      });
+      return false;
     }
-    return true;
   };
 
   return (

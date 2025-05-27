@@ -1,19 +1,80 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Modal, View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useCalendar } from "./CalendarContext";
 import { formatTime } from "./utils";
+import { useLogger } from "./utils/logger";
 
 const TimeChangeConfirmationModal: React.FC = () => {
+  // Add logger
+  const logger = useLogger("TimeChangeConfirmationModal");
+
   const {
     timeChangeConfirmation,
     hideTimeChangeConfirmation,
     confirmTimeChange,
     theme,
     locale,
+    viewType,
   } = useCalendar();
 
   const { visible, event, newStart, newEnd } = timeChangeConfirmation;
 
+  // Add logging when modal appears
+  useEffect(() => {
+    if (visible && event && newStart && newEnd) {
+      logger.debug("Time change confirmation shown", {
+        eventId: event.id,
+        eventTitle: event.title,
+        oldStart: event.start.toLocaleTimeString(),
+        oldEnd: event.end.toLocaleTimeString(),
+        newStart: newStart.toLocaleTimeString(),
+        newEnd: newEnd.toLocaleTimeString(),
+        viewType,
+      });
+    }
+  }, [visible, event, newStart, newEnd, viewType]);
+
+  // Handle confirming time change with error catching
+  const handleConfirmTimeChange = () => {
+    try {
+      logger.debug("Confirming time change", {
+        eventId: event?.id,
+        viewType,
+      });
+      confirmTimeChange();
+    } catch (error: any) {
+      logger.error("❌ Error confirming time change", {
+        error: error.message,
+        eventId: event?.id,
+        viewType,
+      });
+      // Ensure modal is hidden even if there's an error
+      hideTimeChangeConfirmation();
+    }
+  };
+
+  // Handle canceling time change with error catching
+  const handleCancelTimeChange = () => {
+    try {
+      logger.debug("Canceling time change", {
+        eventId: event?.id,
+        viewType,
+      });
+      hideTimeChangeConfirmation();
+    } catch (error: any) {
+      logger.error("❌ Error canceling time change", {
+        error: error.message,
+        eventId: event?.id,
+        viewType,
+      });
+      // Force hide modal if possible
+      try {
+        hideTimeChangeConfirmation();
+      } catch {}
+    }
+  };
+
+  // Safety check - if any required data is missing, don't render
   if (!visible || !event || !newStart || !newEnd) {
     return null;
   }
@@ -29,7 +90,7 @@ const TimeChangeConfirmationModal: React.FC = () => {
       transparent={true}
       visible={visible}
       animationType="fade"
-      onRequestClose={hideTimeChangeConfirmation}
+      onRequestClose={handleCancelTimeChange}
     >
       <View style={styles.centeredView}>
         <View
@@ -75,7 +136,7 @@ const TimeChangeConfirmationModal: React.FC = () => {
                 styles.cancelButton,
                 { backgroundColor: theme.errorColor },
               ]}
-              onPress={hideTimeChangeConfirmation}
+              onPress={handleCancelTimeChange}
             >
               <Text style={styles.buttonText}>Cancelar</Text>
             </TouchableOpacity>
@@ -86,7 +147,7 @@ const TimeChangeConfirmationModal: React.FC = () => {
                 styles.confirmButton,
                 { backgroundColor: theme.successColor },
               ]}
-              onPress={confirmTimeChange}
+              onPress={handleConfirmTimeChange}
             >
               <Text style={styles.buttonText}>Confirmar</Text>
             </TouchableOpacity>

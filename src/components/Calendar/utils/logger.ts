@@ -46,6 +46,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { PERFORMANCE_CONFIG } from "../config/calendarConfig";
+import { Platform } from "react-native";
 
 // Log levels
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -66,6 +67,37 @@ const DEFAULT_CONFIG: LoggerConfig = {
 
 // Global logger state
 let globalEnabled = DEFAULT_CONFIG.enabled;
+
+// Debug levels
+const LOG_LEVELS = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3,
+};
+
+// Current log level - set to DEBUG for debugging auto-scrolling
+const CURRENT_LOG_LEVEL = LOG_LEVELS.DEBUG;
+
+// Enable specific component logging
+const ENABLED_COMPONENTS: Record<string, boolean> = {
+  TimeGrid: true,
+  Event: true,
+  Calendar: true,
+  // Add any other components as needed
+};
+
+// Format timestamp
+const getTimestamp = () => {
+  const now = new Date();
+  return `${now.getHours().toString().padStart(2, "0")}:${now
+    .getMinutes()
+    .toString()
+    .padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now
+    .getMilliseconds()
+    .toString()
+    .padStart(3, "0")}`;
+};
 
 // Logger utility class
 class Logger {
@@ -172,19 +204,40 @@ export const updateLoggerFromConfig = () => {
 };
 
 // React hook for using the logger in components
-export const useLogger = (componentName?: string): Logger => {
-  // Use a ref to store the logger to avoid re-creating it on renders
-  const loggerRef = useRef<Logger | null>(null);
+export const useLogger = (componentName: string) => {
+  const isEnabled = ENABLED_COMPONENTS[componentName] !== false;
 
-  if (!loggerRef.current) {
-    loggerRef.current = new Logger({
-      prefix: componentName
-        ? `[Calendar:${componentName}]`
-        : DEFAULT_CONFIG.prefix,
-    });
-  }
+  const formatMessage = (level: string, message: string, data?: any) => {
+    const timestamp = getTimestamp();
+    const dataString = data ? ` ${JSON.stringify(data, null, 2)}` : "";
+    return `[${timestamp}] [${level}] [${componentName}] ${message}${dataString}`;
+  };
 
-  return loggerRef.current;
+  return {
+    debug: (message: string, data?: any) => {
+      if (isEnabled && CURRENT_LOG_LEVEL <= LOG_LEVELS.DEBUG) {
+        console.log(formatMessage("DEBUG", message, data));
+      }
+    },
+
+    info: (message: string, data?: any) => {
+      if (isEnabled && CURRENT_LOG_LEVEL <= LOG_LEVELS.INFO) {
+        console.info(formatMessage("INFO", message, data));
+      }
+    },
+
+    warn: (message: string, data?: any) => {
+      if (isEnabled && CURRENT_LOG_LEVEL <= LOG_LEVELS.WARN) {
+        console.warn(formatMessage("WARN", message, data));
+      }
+    },
+
+    error: (message: string, data?: any) => {
+      if (isEnabled && CURRENT_LOG_LEVEL <= LOG_LEVELS.ERROR) {
+        console.error(formatMessage("ERROR", message, data));
+      }
+    },
+  };
 };
 
 // Hook to control logging in components with minimum re-renders

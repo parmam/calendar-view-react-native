@@ -497,8 +497,13 @@ const CalendarContent: React.FC = () => {
   // Function to handle the end of drag events
   const handleDragEnd = useCallback(() => {
     // Hide the snap line when drag ends
-    setSnapLineIndicator(null);
-  }, []);
+    if (snapLineIndicator) {
+      logger.debug("Drag ended, hiding snap line", {
+        hadSnapLine: !!snapLineIndicator,
+      });
+      setSnapLineIndicator(null);
+    }
+  }, [snapLineIndicator]);
 
   const renderContent = () => {
     switch (viewType) {
