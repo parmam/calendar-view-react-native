@@ -119,6 +119,13 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     direction: null as "up" | "down" | null,
     speed: 0,
   });
+
+  // Create a ref to track auto-scrolling state for immediate access in animations
+  const autoScrollingRef = useRef({
+    active: false,
+    direction: null as "up" | "down" | null,
+    speed: 0,
+  });
   const [localSnapLineIndicator, setLocalSnapLineIndicator] =
     useState<SnapLineIndicator | null>(null);
 
@@ -294,6 +301,9 @@ const TimeGrid: React.FC<TimeGridProps> = ({
   // Función para validar si un evento puede ser arrastrado a una posición específica
   const handleEventDrag = useCallback(
     (event: CalendarEvent, minuteDiff: number, snapTime?: Date): boolean => {
+      // Marcar que el usuario ha interactuado con el scroll
+      userHasScrolled.current = true;
+
       // Implementación actual...
       // Calcular nuevas fechas
       const newStart = new Date(event.start);
@@ -386,27 +396,26 @@ const TimeGrid: React.FC<TimeGridProps> = ({
   );
 
   const handleEventDragEnd = useCallback(() => {
-    // Detener inmediatamente el autoscroll
-    if (autoScrolling.active) {
-      logger.debug("✋ DRAG ENDED: Stopping auto-scroll immediately", {
-        wasActive: autoScrolling.active,
-        direction: autoScrolling.direction,
-        finalScrollPosition: scrollPosition.y.toFixed(1),
-        viewType,
-      });
+    // Force immediate auto-scroll stop regardless of current state
+    logger.debug("✋ DRAG ENDED: Stopping auto-scroll immediately", {
+      wasActive: autoScrolling.active,
+      direction: autoScrolling.direction,
+      finalScrollPosition: scrollPosition.y.toFixed(1),
+      viewType,
+    });
 
-      // Desactivar autoscroll de forma inmediata usando actualización funcional
-      setAutoScrolling((prevState) => {
-        if (prevState.active) {
-          return {
-            active: false,
-            direction: null,
-            speed: 0,
-          };
-        }
-        return prevState; // No cambiar el estado si ya no está activo
-      });
-    }
+    // Update both state and ref for immediate effect
+    const newScrollState = {
+      active: false,
+      direction: null,
+      speed: 0,
+    };
+
+    // Update ref immediately for animation frame checks
+    autoScrollingRef.current = newScrollState;
+
+    // Update state for component re-renders
+    setAutoScrolling(newScrollState);
 
     // Ocultar la línea de snap cuando termina el arrastre
     if (localSnapLineIndicator) {
@@ -430,6 +439,9 @@ const TimeGrid: React.FC<TimeGridProps> = ({
   const handleDragNearEdge = useCallback(
     (distanceFromEdge: number, direction: "up" | "down") => {
       try {
+        // Marcar que el usuario ha interactuado con el scroll
+        userHasScrolled.current = true;
+
         // Safety check for day view
         if (viewType === "day" && (!dates || dates.length === 0)) {
           logger.warn("⚠️ DAY VIEW DRAG ISSUE: No dates available", {
@@ -438,14 +450,24 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           return;
         }
 
-        // Obtener la configuración de scroll paginado
-        const pagingScrollEnabled =
-          calendarConfig?.dragPreviewConfig?.enablePagingScroll !== false;
-        const pagingScrollHours =
-          calendarConfig?.dragPreviewConfig?.pagingScrollHours || 3;
+        // Obtener configuración de auto-scroll desde calendarConfig o usar valores por defecto
+        const autoScrollConfig = calendarConfig?.autoScrollConfig || {
+          enabled: true,
+          edgeThreshold: 100,
+          speed: 3,
+          constant: true,
+          acceleration: 0.2,
+          maxSpeed: 8,
+          minSpeed: 2,
+          frameInterval: 16,
+        };
 
-        // Define thresholds
-        const edgeThreshold = 100; // px from edge to start scrolling
+        // Verificar si el auto-scroll está habilitado
+        if (!autoScrollConfig.enabled) {
+          return;
+        }
+
+        const edgeThreshold = autoScrollConfig.edgeThreshold;
 
         // Solo activar scroll si estamos dentro del umbral
         if (distanceFromEdge > edgeThreshold) {
@@ -460,111 +482,63 @@ const TimeGrid: React.FC<TimeGridProps> = ({
               }
             );
 
-            setAutoScrolling((prevState) => {
-              if (prevState.active) {
-                return {
-                  active: false,
-                  direction: null,
-                  speed: 0,
-                };
-              }
-              return prevState;
-            });
+            // Detener el auto-scroll
+            const newScrollState = {
+              active: false,
+              direction: null,
+              speed: 0,
+            };
+
+            autoScrollingRef.current = newScrollState;
+            setAutoScrolling(newScrollState);
           }
           return;
         }
 
-        // Si el scroll paginado está activado, realizar un scroll de página
-        if (pagingScrollEnabled) {
-          // Si ya estamos en modo autoscroll, no iniciar otro scroll
-          if (autoScrolling.active) {
-            return;
-          }
-
-          // Calcular la posición actual del scroll en términos de hora
-          const currentHour =
-            scrollPosition.y / (HOUR_HEIGHT * zoomLevel) + timeRange.start;
-
-          // Calcular nueva posición según la dirección
-          let targetHour;
-          if (direction === "up") {
-            // Scroll hacia arriba (horas anteriores)
-            targetHour = Math.max(
-              timeRange.start,
-              currentHour - pagingScrollHours
-            );
-          } else {
-            // Scroll hacia abajo (horas posteriores)
-            targetHour = Math.min(
-              timeRange.end,
-              currentHour + pagingScrollHours
-            );
-          }
-
-          // Convertir hora a posición en píxeles
-          const targetPosition =
-            (targetHour - timeRange.start) * HOUR_HEIGHT * zoomLevel;
-
-          logger.debug("🔄 PAGING SCROLL", {
-            direction,
-            currentHour: currentHour.toFixed(1),
-            targetHour: targetHour.toFixed(1),
-            pagingScrollHours,
-            currentPosition: scrollPosition.y.toFixed(1),
-            targetPosition: targetPosition.toFixed(1),
-            viewType,
-          });
-
-          // Realizar el scroll con animación
-          scrollTo({ y: targetPosition, animated: true });
-
-          // No activamos autoScrolling porque este es un scroll único
-          return;
-        }
-
-        // Si llegamos aquí, el scroll paginado está desactivado, usamos el scroll continuo anterior
-
-        // Improved scroll speed calculation with non-linear acceleration
-        const maxScrollSpeed = 8;
+        // Calcular la velocidad del scroll según la configuración
         let scrollSpeed;
 
-        if (distanceFromEdge < 20) {
-          scrollSpeed = maxScrollSpeed;
+        if (autoScrollConfig.constant) {
+          // Usar velocidad constante
+          scrollSpeed = autoScrollConfig.speed;
         } else {
-          // Smoother curve for acceleration
-          const normalizedDistance = distanceFromEdge / edgeThreshold;
-          scrollSpeed = maxScrollSpeed * Math.pow(1 - normalizedDistance, 2);
+          // Calcular velocidad basada en la distancia del borde
+          // Normalize distance (0 = at edge, 1 = at threshold)
+          const normalizedDistance = Math.min(
+            1,
+            distanceFromEdge / edgeThreshold
+          );
+
+          // Apply acceleration curve
+          scrollSpeed =
+            autoScrollConfig.maxSpeed *
+            Math.pow(1 - normalizedDistance, autoScrollConfig.acceleration);
+
+          // Ensure minimum speed
+          scrollSpeed = Math.max(autoScrollConfig.minSpeed, scrollSpeed);
+
+          // Round to 1 decimal place for smoother transitions
+          scrollSpeed = Math.round(scrollSpeed * 10) / 10;
         }
 
-        // Ensure minimum speed and round for consistency
-        scrollSpeed = Math.max(1, Math.round(scrollSpeed));
+        // Activar el auto-scroll con la velocidad calculada
+        const newScrollState = {
+          active: true,
+          direction: direction,
+          speed: scrollSpeed,
+        };
 
-        // Update auto-scrolling state with functional update pattern
-        setAutoScrolling((prevState) => {
-          // Only update if state is changing to avoid unnecessary renders
-          if (
-            !prevState.active ||
-            prevState.direction !== direction ||
-            prevState.speed !== scrollSpeed
-          ) {
-            return {
-              active: true,
-              direction: direction,
-              speed: scrollSpeed,
-            };
-          }
-          return prevState;
-        });
+        autoScrollingRef.current = newScrollState;
+        setAutoScrolling(newScrollState);
 
         logger.debug("👉 EDGE DETECTED:", {
           direction,
           distanceFromEdge: distanceFromEdge.toFixed(1),
-          scrollSpeed,
+          scrollSpeed: scrollSpeed.toFixed(1),
           scrollPosition: scrollPosition.y.toFixed(1),
-          viewHeight: scrollViewHeight,
-          normalizedDistance: (distanceFromEdge / edgeThreshold).toFixed(2),
+          edgeThreshold,
+          isConstantSpeed: autoScrollConfig.constant,
           viewType,
-          pagingScrollEnabled,
         });
       } catch (error: any) {
         logger.error("❌ EDGE DETECTION ERROR", {
@@ -577,15 +551,10 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     },
     [
       scrollPosition.y,
-      scrollViewHeight,
-      autoScrolling.active,
       viewType,
       dates,
-      HOUR_HEIGHT,
-      zoomLevel,
-      timeRange,
-      scrollTo,
       calendarConfig,
+      autoScrolling.active,
       logger,
     ]
   );
@@ -631,22 +600,23 @@ const TimeGrid: React.FC<TimeGridProps> = ({
       return;
     }
 
-    // Safety check - if the component is unmounting or event is no longer being dragged
+    // Detener auto-scroll si no hay evento siendo arrastrado
     if (!isResizingEvent) {
-      logger.debug("Auto-scroll cancelled because dragging stopped", {
-        viewType,
-        isResizingEvent,
-      });
-      setAutoScrolling((prevState) => {
-        if (prevState.active) {
-          return {
-            active: false,
-            direction: null,
-            speed: 0,
-          };
-        }
-        return prevState;
-      });
+      // Solo detener si está activo (para evitar actualizaciones de estado innecesarias)
+      if (autoScrolling.active) {
+        logger.debug("Auto-scroll detenido: no hay arrastre activo", {
+          viewType,
+          isResizingEvent,
+        });
+
+        // Detener auto-scroll
+        setAutoScrolling({
+          active: false,
+          direction: null,
+          speed: 0,
+        });
+      }
+
       return;
     }
 
@@ -670,6 +640,18 @@ const TimeGrid: React.FC<TimeGridProps> = ({
       return;
     }
 
+    // Obtener configuración de auto-scroll o usar valores por defecto
+    const autoScrollConfig = calendarConfig?.autoScrollConfig || {
+      enabled: true,
+      edgeThreshold: 100,
+      speed: 3,
+      constant: true,
+      acceleration: 0.2,
+      maxSpeed: 8,
+      minSpeed: 2,
+      frameInterval: 16,
+    };
+
     // Calculate scroll limits based on timeRange
     const startHour = Math.max(0, timeRange.start - 1); // One hour before available start
     const endHour = timeRange.end + 1; // One hour after available end
@@ -692,36 +674,78 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
         frameCount++;
 
-        // Verificar si el arrastre ha terminado
-        if (!isResizingEvent || !autoScrolling.active) {
-          logger.debug("🛑 Auto-scroll frame cancelled", {
+        // Check if we need to stop scrolling
+        // Only check isResizingEvent to allow scrolling to start properly
+        if (
+          !isResizingEvent ||
+          (viewType === "day" && (!dates || dates.length === 0))
+        ) {
+          logger.debug("🚨 AUTO-SCROLL FRAME CANCELLED", {
             isResizingEvent,
             autoScrollActive: autoScrolling.active,
             frame: frameCount,
+            viewType,
+            datesAvailable: dates?.length || 0,
           });
+
+          // Cancel any pending animation frame
+          if (animationFrameId !== null) {
+            try {
+              cancelAnimationFrame(animationFrameId);
+              animationFrameId = null;
+              logger.debug("🚫 ANIMATION FRAME CANCELLED", {
+                frame: frameCount,
+              });
+            } catch (error) {
+              logger.error("Error cancelling animation frame", {
+                error: String(error),
+              });
+            }
+          }
+
+          // Force auto-scroll to stop completely - more aggressive approach
+          setAutoScrolling({
+            active: false,
+            direction: null,
+            speed: 0,
+          });
+
           return; // No continuar con la animación
         }
 
-        // Calculate delta time for smoother animation
-        const deltaTime = lastTimestamp ? (timestamp - lastTimestamp) / 16 : 1; // normalize to ~60fps
-        lastTimestamp = timestamp;
-
         // Safety check - make sure scroll position is valid
-        if (typeof scrollPosition.y !== "number") {
+        if (!scrollPosition || typeof scrollPosition.y !== "number") {
           throw new Error("Invalid scroll position");
         }
 
         // Get current scroll position
         const currentY = scrollPosition.y;
 
-        // Calculate scroll delta with easing
-        let delta =
+        // Ensure autoScrolling object is valid
+        if (
+          !autoScrolling ||
+          typeof autoScrolling.direction !== "string" ||
+          typeof autoScrolling.speed !== "number"
+        ) {
+          logger.error("Invalid autoScrolling state", { autoScrolling });
+          return;
+        }
+
+        // SIMPLIFICADO: Usar una velocidad constante sin cálculos complejos
+        // Esto evita rebotes y hace que el movimiento sea predecible
+        const delta =
           autoScrolling.direction === "up"
             ? -autoScrolling.speed
             : autoScrolling.speed;
 
-        // Apply deltaTime for consistent speed regardless of frame rate
-        delta = delta * deltaTime;
+        // Actualizar timestamp para mantener la referencia del tiempo
+        lastTimestamp = timestamp;
+
+        // Check if minScrollY and maxScrollY are defined
+        if (typeof minScrollY !== "number" || typeof maxScrollY !== "number") {
+          logger.error("Invalid scroll boundaries", { minScrollY, maxScrollY });
+          return;
+        }
 
         // Calculate new position with limits
         const newY = Math.max(
@@ -730,30 +754,31 @@ const TimeGrid: React.FC<TimeGridProps> = ({
         );
 
         // Only update if position changed and scroll function exists
-        if (newY !== currentY && typeof scrollTo === "function") {
-          scrollTo({ y: newY, animated: false });
+        if (Math.abs(newY - currentY) > 0.1 && typeof scrollTo === "function") {
+          try {
+            // Use animated: false for smoother continuous scrolling
+            scrollTo({ y: newY, animated: false });
+          } catch (scrollError: any) {
+            logger.error("Error during scroll", {
+              error: scrollError.message,
+              newY,
+              currentY,
+            });
+            // Don't rethrow - allow animation to continue
+          }
 
-          // Log every ~30 frames for debugging
-          if (Math.random() < 0.03) {
+          // Log occasionally for debugging
+          if (Math.random() < 0.02) {
+            // Reduced logging frequency
             logger.debug("🔄 AUTO-SCROLL UPDATE:", {
               viewType,
               frame: frameCount,
               direction: autoScrolling.direction,
-              deltaTime: deltaTime.toFixed(2),
-              currentPosition: currentY.toFixed(1),
+              speed: autoScrolling.speed.toFixed(1),
               delta: delta.toFixed(2),
+              currentPosition: currentY.toFixed(1),
               newPosition: newY.toFixed(1),
-              isResizingEvent,
-              visibleHours: {
-                top: (currentY / (HOUR_HEIGHT * zoomLevel) + startHour).toFixed(
-                  1
-                ),
-                bottom: (
-                  (currentY + (scrollViewHeight || 0)) /
-                    (HOUR_HEIGHT * zoomLevel) +
-                  startHour
-                ).toFixed(1),
-              },
+              constant: autoScrollConfig.constant,
               boundaries: {
                 hitTop: newY <= minScrollY,
                 hitBottom: newY >= maxScrollY,
@@ -762,9 +787,31 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           }
         }
 
-        // Continue animation ONLY if still active AND dragging AND mounted
+        // Continue animation with proper timing for smoother scrolling
+        // Only continue if auto-scroll is active and component is mounted
         if (autoScrolling.active && isResizingEvent && isMounted) {
-          animationFrameId = requestAnimationFrame(scrollFrame);
+          try {
+            // Usar setTimeout con el intervalo configurado en lugar de requestAnimationFrame
+            // Esto nos da más control sobre la frecuencia de actualización
+            const timeoutId = setTimeout(() => {
+              animationFrameId = requestAnimationFrame(scrollFrame);
+            }, autoScrollConfig.frameInterval);
+
+            // Asignar el timeoutId para poder cancelarlo si es necesario
+            animationFrameId = timeoutId as unknown as number;
+          } catch (rafError: any) {
+            logger.error("Error scheduling animation frame", {
+              error: rafError.message,
+            });
+            // Stop the animation on error
+            if (isMounted) {
+              setAutoScrolling({
+                active: false,
+                direction: null,
+                speed: 0,
+              });
+            }
+          }
         } else {
           logger.debug("🚫 Auto-scroll animation stopped", {
             autoScrollActive: autoScrolling.active,
@@ -778,7 +825,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
         logger.error("❌ AUTO-SCROLL ERROR", {
           error: error.message,
           viewType,
-          autoScrolling,
+          autoScrolling: JSON.stringify(autoScrolling),
           isResizingEvent,
           scrollPosition:
             typeof scrollPosition === "object"
@@ -788,16 +835,17 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
         // Stop auto-scrolling
         if (isMounted) {
-          setAutoScrolling((prevState) => {
-            if (prevState.active) {
-              return {
-                active: false,
-                direction: null,
-                speed: 0,
-              };
-            }
-            return prevState;
-          });
+          try {
+            setAutoScrolling({
+              active: false,
+              direction: null,
+              speed: 0,
+            });
+          } catch (stateError: any) {
+            logger.error("Failed to reset auto-scrolling state", {
+              error: stateError.message,
+            });
+          }
         }
       }
     };
@@ -815,13 +863,26 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     // Cleanup on unmount or when scrolling stops
     return () => {
       isMounted = false;
+
+      // Cancelar cualquier animación pendiente
       if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
-        logger.debug("🛑 AUTO-SCROLL STOPPED", {
-          framesExecuted: frameCount,
-          finalPosition: scrollPosition?.y?.toFixed(1) || "unknown",
-          viewType,
-        });
+        try {
+          // Cancelar tanto el timeout como el animation frame
+          clearTimeout(animationFrameId as unknown as NodeJS.Timeout);
+          cancelAnimationFrame(animationFrameId);
+
+          logger.debug("🛑 AUTO-SCROLL STOPPED", {
+            framesExecuted: frameCount,
+            finalPosition: scrollPosition?.y?.toFixed(1) || "unknown",
+            viewType,
+          });
+        } catch (error) {
+          logger.error("Error canceling animation", {
+            error: String(error),
+            viewType,
+          });
+        }
+        animationFrameId = null;
       }
     };
   }, [
@@ -840,7 +901,9 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
   // Scroll to current time on first render
   useEffect(() => {
-    if (nowIndicatorPosition) {
+    // Solo hacer scroll inicial si no hay eventos de arrastre activos
+    // y el usuario no ha hecho scroll manual
+    if (nowIndicatorPosition && !isResizingEvent && !userHasScrolled.current) {
       const position = Math.max(0, nowIndicatorPosition - 100);
       logger.debug("Scrolling to current time", { position });
 
@@ -849,11 +912,41 @@ const TimeGrid: React.FC<TimeGridProps> = ({
         scrollTo({ y: position, animated: true });
       }, 500);
     }
-  }, [nowIndicatorPosition, viewType, selectedDate, scrollTo, logger]);
+  }, [
+    nowIndicatorPosition,
+    viewType,
+    selectedDate,
+    scrollTo,
+    logger,
+    isResizingEvent,
+  ]);
+
+  // Referencia para rastrear si se ha movido manualmente el scroll
+  const userHasScrolled = useRef(false);
+
+  // Resetear el flag cuando cambia la fecha o vista
+  useEffect(() => {
+    userHasScrolled.current = false;
+  }, [selectedDate, viewType]);
+
+  // Detectar scroll manual del usuario
+  const handleUserScroll = useCallback(() => {
+    userHasScrolled.current = true;
+    logger.debug(
+      "Usuario ha hecho scroll manual, desactivando scroll automático"
+    );
+  }, [logger]);
 
   // Actualizar el scroll cada minuto para seguir la línea de tiempo actual
+  // Pero solo si el usuario no ha hecho scroll manual
   useEffect(() => {
     const interval = setInterval(() => {
+      // No hacer scroll automático si el usuario ha movido manualmente la vista
+      // o si hay un evento siendo arrastrado
+      if (userHasScrolled.current || isResizingEvent) {
+        return;
+      }
+
       const now = new Date();
       const hours = now.getHours();
       const minutes = now.getMinutes();
@@ -881,6 +974,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     scrollTo,
     HOUR_HEIGHT,
     logger,
+    isResizingEvent,
   ]);
 
   // Efecto para detectar cambios en eventos y forzar recálculo
@@ -1600,6 +1694,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
             },
           ]}
           onLayout={handleScrollViewLayout}
+          onScrollBeginDrag={handleUserScroll}
           onScrollEndDrag={() => {
             // Ayuda a mantener el rastreo de la posición actual de desplazamiento
             logger.debug("Scroll end drag");

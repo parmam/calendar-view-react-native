@@ -78,8 +78,20 @@ export type DragPreviewConfig = {
   enablePagingScroll?: boolean; // Whether to use paging scroll instead of continuous scroll (default: true)
 };
 
+export type AutoScrollConfig = {
+  enabled: boolean; // Activar/desactivar el auto-scroll
+  edgeThreshold: number; // Distancia en píxeles desde el borde que activa el auto-scroll
+  speed: number; // Velocidad base del auto-scroll (píxeles por frame)
+  constant: boolean; // Si es true, la velocidad es constante sin aceleración
+  acceleration: number; // Factor de aceleración cuando constant=false (0-1)
+  maxSpeed: number; // Velocidad máxima en píxeles por frame
+  minSpeed: number; // Velocidad mínima en píxeles por frame
+  frameInterval: number; // Intervalo de tiempo entre frames (ms)
+};
+
 export type CalendarConfig = {
   dragPreviewConfig: DragPreviewConfig;
+  autoScrollConfig?: AutoScrollConfig;
 };
 
 export interface TimeChangeConfirmation {

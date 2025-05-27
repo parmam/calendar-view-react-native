@@ -583,10 +583,13 @@ const AppContent = () => {
             calendarConfig={calendarConfig}
           />
         </View>
+
+        {/* Debug Controls 
         <DebugControls
           calendarConfig={calendarConfig}
           onConfigChange={handleConfigChange}
         />
+        */}
         <StatusBar style="auto" />
       </SafeAreaView>
     </GestureHandlerRootView>

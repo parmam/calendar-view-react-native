@@ -58,7 +58,7 @@ import {
  *                         Establece el tamaño inicial de eventos recién creados.
  */
 export const LAYOUT_CONFIG = {
-  HOUR_HEIGHT: 60,
+  HOUR_HEIGHT: 120,
   TIME_LABEL_WIDTH: 50,
   MIN_EVENT_WIDTH: 35,
   EVENT_MARGIN: 2,
@@ -236,7 +236,7 @@ export const DEFAULT_HAPTIC_OPTIONS: HapticOptions = {
  */
 export const DEFAULT_DRAG_PREVIEW_CONFIG: DragPreviewConfig = {
   previewOffset: 20,
-  connectionLineWidth: 2,
+  connectionLineWidth: 0,
 };
 
 /**
@@ -247,9 +247,53 @@ export const DEFAULT_DRAG_PREVIEW_CONFIG: DragPreviewConfig = {
  *
  * dragPreviewConfig: Configuración para la previsualización de eventos al arrastrarlos.
  *                    Controla el comportamiento visual del arrastre de eventos.
+ *
+ * autoScrollConfig: Configuración para el comportamiento del auto-scroll al arrastrar eventos
+ *                   cerca de los bordes de la pantalla.
  */
+/**
+ * Configuración para el auto-scroll
+ *
+ * Define el comportamiento del desplazamiento automático cuando se arrastra un evento
+ * cerca de los bordes de la vista.
+ *
+ * enabled: Activa o desactiva completamente la función de auto-scroll.
+ *
+ * edgeThreshold: Distancia en píxeles desde el borde que activa el auto-scroll.
+ *                Un valor mayor inicia el scroll cuando el cursor está más lejos del borde.
+ *
+ * speed: Velocidad base del auto-scroll en píxeles por frame.
+ *        Establece la velocidad general del desplazamiento.
+ *
+ * constant: Si es verdadero, la velocidad será constante sin aceleración.
+ *           Si es falso, la velocidad aumentará a medida que el cursor se acerque más al borde.
+ *
+ * acceleration: Factor de aceleración cuando constant=false (0-1).
+ *               Valores más altos hacen que la aceleración sea más pronunciada.
+ *
+ * maxSpeed: Velocidad máxima en píxeles por frame.
+ *           Limita la velocidad máxima que puede alcanzar el auto-scroll.
+ *
+ * minSpeed: Velocidad mínima en píxeles por frame.
+ *           Establece una velocidad mínima para que el scroll siempre sea perceptible.
+ *
+ * frameInterval: Intervalo de tiempo entre frames de animación en milisegundos.
+ *                Controla la suavidad de la animación.
+ */
+export const DEFAULT_AUTO_SCROLL_CONFIG = {
+  enabled: true,
+  edgeThreshold: 100,
+  speed: 3,
+  constant: true,
+  acceleration: 0.2,
+  maxSpeed: 8,
+  minSpeed: 2,
+  frameInterval: 16, // ~60fps
+};
+
 export const DEFAULT_CALENDAR_CONFIG: CalendarConfig = {
   dragPreviewConfig: DEFAULT_DRAG_PREVIEW_CONFIG,
+  autoScrollConfig: DEFAULT_AUTO_SCROLL_CONFIG,
 };
 
 /**
@@ -288,7 +332,7 @@ export const INITIAL_CALENDAR_STATE = {
   isDragEnabled: true,
   firstDayOfWeek: 0, // 0 = Domingo, 1 = Lunes
   visibleDays: [0, 1, 2, 3, 4, 5, 6], // Todos los días visibles por defecto
-  timeInterval: 30, // Intervalo de tiempo en minutos
+  timeInterval: 15, // Intervalo de tiempo en minutos
   locale: "es-ES", // Localización predeterminada
 };
 

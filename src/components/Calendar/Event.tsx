@@ -210,7 +210,19 @@ const Event: React.FC<EventProps> = ({
     }
 
     // Calculate how many columns we've moved
+    // Use division to get a fractional number, then round to closest integer
+    // This makes the day change trigger when we've moved more than half the column width
     const columnsMoved = Math.round(dx / columnWidth);
+
+    // Log the calculation details
+    logger.debug("Day difference calculation", {
+      dx,
+      columnWidth,
+      columnsMoved,
+      currentDayIndex: dayIndex,
+      availableDays: dates.length,
+      viewType,
+    });
 
     // Don't allow moving beyond available dates
     const newDayIndex = Math.max(
@@ -223,6 +235,43 @@ const Event: React.FC<EventProps> = ({
 
     return dayDiff;
   };
+
+  // Function to get horizontal preview position based on day difference
+  const getHorizontalPreviewPosition = (dayDiff: number): number | null => {
+    if (dayDiff === 0 || !columnWidth) return null;
+
+    // Position is columnWidth * dayDiff
+    // This gives the exact position for the preview rectangle
+    const position = columnWidth * dayDiff;
+
+    logger.debug("Horizontal preview position calculation", {
+      dayDiff,
+      columnWidth,
+      calculatedPosition: position,
+      eventId: event.id,
+    });
+
+    return position;
+  };
+
+  // Clear all preview elements
+  const clearPreviewElements = useCallback(() => {
+    setPreviewPosition(null);
+    setHorizontalPreviewPosition(null);
+    setIsTargetUnavailable(false);
+
+    logger.debug("Cleared all preview elements", {
+      eventId: event.id,
+      title: event.title,
+    });
+  }, [event.id, event.title]);
+
+  // Add effect to clear preview elements when drag stops
+  useEffect(() => {
+    if (!isResizing) {
+      clearPreviewElements();
+    }
+  }, [isResizing, clearPreviewElements]);
 
   // Pan responder for dragging the event
   const panResponder = useRef<PanResponderInstance>(
@@ -239,6 +288,9 @@ const Event: React.FC<EventProps> = ({
           position: { top, left },
         });
         setIsPressed(true);
+
+        // Clear any existing preview elements
+        clearPreviewElements();
 
         // Highlight the event when being dragged
         Animated.timing(scaleAnim, {
@@ -274,223 +326,97 @@ const Event: React.FC<EventProps> = ({
         }
       },
       onPanResponderMove: (e, gestureState) => {
-        // Update both vertical and horizontal position
-        translateY.setValue(gestureState.dy);
-
-        // Only update horizontal position in multi-day views
-        if (
-          viewType !== "day" &&
-          columnWidth &&
-          typeof dayIndex === "number" &&
-          dates
-        ) {
-          translateX.setValue(gestureState.dx);
-        }
-
-        // Calculate current position in the view
-        const currentPositionY = top + gestureState.dy;
-        const absolutePositionY = currentPositionY + scrollPosition.y;
-
-        // Check if we're near the edges and should trigger auto-scrolling
-        if (viewHeight && onDragNearEdge) {
-          // Distance from top edge
-          const distanceFromTop = absolutePositionY;
-
-          // Distance from bottom edge
-          const distanceFromBottom =
-            viewHeight - (absolutePositionY + eventHeight);
-
-          // Edge detection threshold (in pixels)
-          const edgeThreshold = 100;
-
-          // Log edge proximity info (reduce frecuencia de logs)
-          if (Math.abs(gestureState.dy) > 20 && Math.random() < 0.03) {
-            logger.debug("📏 EVENT DRAG POSITION:", {
-              eventId: event.id,
-              eventTitle: event.title,
-              top: top.toFixed(1),
-              dy: gestureState.dy.toFixed(1),
-              dx: gestureState.dx.toFixed(1),
-              currentPosition: currentPositionY.toFixed(1),
-              absolutePosition: absolutePositionY.toFixed(1),
-              scrollPosition: scrollPosition.y.toFixed(1),
-              viewHeight,
-              distanceFromTop: distanceFromTop.toFixed(1),
-              distanceFromBottom: distanceFromBottom.toFixed(1),
-              nearTopEdge: distanceFromTop < edgeThreshold,
-              nearBottomEdge: distanceFromBottom < edgeThreshold,
-              pagingScrollEnabled:
-                calendarConfig?.dragPreviewConfig?.enablePagingScroll,
-            });
-          }
-
-          // Check if we're near the top edge
-          if (distanceFromTop < edgeThreshold) {
-            // Si estamos usando scroll paginado, necesitamos un trigger más agresivo
-            // porque el scrolleo ocurrirá de una vez, no continuamente
-            const pagingScrollEnabled =
-              calendarConfig?.dragPreviewConfig?.enablePagingScroll;
-            const triggerThreshold = pagingScrollEnabled ? edgeThreshold : 50;
-
-            if (distanceFromTop < triggerThreshold) {
-              logger.debug("⬆️ NEAR TOP EDGE:", {
-                eventId: event.id,
-                distance: distanceFromTop.toFixed(1),
-                threshold: edgeThreshold,
-                pagingScrollEnabled,
-              });
-              onDragNearEdge(distanceFromTop, "up");
-            }
-          }
-          // Check if we're near the bottom edge
-          else if (distanceFromBottom < edgeThreshold) {
-            // Igual que arriba, usamos un trigger más agresivo para scroll paginado
-            const pagingScrollEnabled =
-              calendarConfig?.dragPreviewConfig?.enablePagingScroll;
-            const triggerThreshold = pagingScrollEnabled ? edgeThreshold : 50;
-
-            if (distanceFromBottom < triggerThreshold) {
-              logger.debug("⬇️ NEAR BOTTOM EDGE:", {
-                eventId: event.id,
-                distance: distanceFromBottom.toFixed(1),
-                threshold: edgeThreshold,
-                pagingScrollEnabled,
-              });
-              onDragNearEdge(distanceFromBottom, "down");
-            }
-          }
-        }
-
-        // Constante para conversión de píxeles a minutos
-        const pixelsPerMinute = HOUR_HEIGHT / 60; // 1 pixel por minuto si HOUR_HEIGHT es 60
-
-        // Usar el valor exacto de dy sin redondeo para cálculos de posición
-        const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
-
-        // Snap to precise timeInterval grid
-        // First get total minutes from start of day for the original event
-        const originalMinutesFromMidnight =
-          event.start.getHours() * 60 + event.start.getMinutes();
-
-        // Calculate new raw minutes
-        const newMinutesFromMidnight =
-          originalMinutesFromMidnight + exactMinuteDiff;
-
-        // Snap to nearest timeInterval grid point
-        const snappedMinutesFromMidnight =
-          Math.round(newMinutesFromMidnight / timeInterval) * timeInterval;
-
-        // Calculate the final minute difference that maintains the timeInterval grid
-        const minuteDiff =
-          snappedMinutesFromMidnight - originalMinutesFromMidnight;
-
-        // Calculate day difference from horizontal movement
-        const dayDiff = calculateDayDiff(gestureState.dx);
-
-        // Create a new date object for the snap time
-        const snapTime = new Date(event.start);
-
-        // If we have day difference, apply it first
-        if (dayDiff !== 0) {
-          snapTime.setDate(snapTime.getDate() + dayDiff);
-        }
-
-        // Reset minutes completely and then add the snapped minutes
-        snapTime.setHours(
-          Math.floor(snappedMinutesFromMidnight / 60),
-          snappedMinutesFromMidnight % 60,
-          0,
-          0
-        );
-
-        // Mostrar previsualización si hay cualquier movimiento significativo
-        if (Math.abs(gestureState.dy) > 1 || Math.abs(gestureState.dx) > 10) {
-          // Calcular nueva posición de previsualización usando el valor exacto
-          const newPreviewPosition = calculatePreviewPosition(
-            gestureState.dy, // Usar directamente el desplazamiento en píxeles
-            minuteDiff
-          );
-
-          // Calculate horizontal preview position if in multi-day view
-          let newHorizontalPosition = null;
-          if (viewType !== "day" && columnWidth && dayDiff !== 0) {
-            newHorizontalPosition = dayDiff * columnWidth;
-            setHorizontalPreviewPosition(newHorizontalPosition);
-          } else {
-            setHorizontalPreviewPosition(null);
-          }
-
-          // Call the parent event drag handler with the snap time
-          if (onEventUpdate) {
-            // This will only validate if dragging is allowed and update the snap line
-            const isValid = validateEventDrag(event, minuteDiff, snapTime);
-            setIsTargetUnavailable(!isValid);
-          }
-
-          // Registrar información detallada para depuración
-          logger.debug("Movimiento durante arrastre", {
-            eventId: event.id,
-            eventTitle: event.title,
-            dy: gestureState.dy,
-            dx: gestureState.dx,
-            exactMinuteDiff,
-            dayDiff,
-            originalMinutesFromMidnight,
-            newMinutesFromMidnight,
-            snappedMinutesFromMidnight,
-            minuteDiff,
-            snapTimeHour: snapTime.getHours(),
-            snapTimeMinute: snapTime.getMinutes(),
-            snapTime: snapTime.toLocaleTimeString(),
-            snapDate: snapTime.toLocaleDateString(),
-            timeInterval,
-            top,
-            previewOffset,
-            currentTranslateY,
-            currentTranslateX,
-            newPreviewPosition,
-            newHorizontalPosition,
-          });
-
-          setPreviewPosition(newPreviewPosition);
-        } else {
-          setPreviewPosition(null);
-          setHorizontalPreviewPosition(null);
-        }
-      },
-      onPanResponderRelease: (e, gestureState) => {
         try {
-          // Llamar al drag end handler inmediatamente para parar cualquier autoscroll
-          if (onEventDragEnd) {
-            onEventDragEnd();
+          // Update both vertical and horizontal position
+          translateY.setValue(gestureState.dy);
+
+          // Only update horizontal position in multi-day views
+          if (
+            viewType !== "day" &&
+            columnWidth &&
+            typeof dayIndex === "number" &&
+            dates
+          ) {
+            translateX.setValue(gestureState.dx);
           }
 
-          // Reset the animation
-          Animated.timing(scaleAnim, {
-            toValue: 1,
-            duration: 100,
-            useNativeDriver: true,
-          }).start();
+          // Calculate current position in the view
+          const currentPositionY = top + gestureState.dy;
+          const absolutePositionY = currentPositionY + scrollPosition.y;
 
-          setIsPressed(false);
-          setPreviewPosition(null);
-          setHorizontalPreviewPosition(null);
-          setIsTargetUnavailable(false);
+          // Check if we're near the edges and should trigger auto-scrolling
+          if (viewHeight && onDragNearEdge) {
+            try {
+              // Distance from top edge
+              const distanceFromTop = absolutePositionY;
 
-          // Handle the event update
-          if (
-            Math.abs(gestureState.dy) > 10 ||
-            Math.abs(gestureState.dx) > 10
-          ) {
-            // Calculate minutes using the same grid-snapping logic as in onPanResponderMove
-            const pixelsPerMinute = HOUR_HEIGHT / 60;
+              // Distance from bottom edge
+              const distanceFromBottom =
+                viewHeight - (absolutePositionY + eventHeight);
+
+              // Edge detection threshold (in pixels)
+              const edgeThreshold = 120; // Increased to match TimeGrid's threshold
+
+              // Enhanced edge detection logic for smoother scrolling
+              // 1. Calculate how far into the edge zone we are (0-1 range)
+              const topEdgeRatio = Math.max(
+                0,
+                1 - distanceFromTop / edgeThreshold
+              );
+              const bottomEdgeRatio = Math.max(
+                0,
+                1 - distanceFromBottom / edgeThreshold
+              );
+
+              // 2. Only log occasionally to reduce spam
+              if (Math.abs(gestureState.dy) > 20 && Math.random() < 0.02) {
+                logger.debug("📏 EVENT DRAG POSITION:", {
+                  eventId: event.id,
+                  top: top.toFixed(1),
+                  dy: gestureState.dy.toFixed(1),
+                  absolutePosition: absolutePositionY.toFixed(1),
+                  distanceFromTop: distanceFromTop.toFixed(1),
+                  distanceFromBottom: distanceFromBottom.toFixed(1),
+                  topEdgeRatio: topEdgeRatio.toFixed(2),
+                  bottomEdgeRatio: bottomEdgeRatio.toFixed(2),
+                });
+              }
+
+              // 3. Smoother transition for edge detection
+              // If we're in the edge zone at all, start triggering auto-scroll
+              if (topEdgeRatio > 0) {
+                // Call onDragNearEdge with the exact distance
+                if (typeof onDragNearEdge === "function") {
+                  onDragNearEdge(distanceFromTop, "up");
+                }
+              } else if (bottomEdgeRatio > 0) {
+                // Call onDragNearEdge with the exact distance
+                if (typeof onDragNearEdge === "function") {
+                  onDragNearEdge(distanceFromBottom, "down");
+                }
+              }
+            } catch (edgeError: any) {
+              // Log edge detection error but don't crash the drag operation
+              logger.error("Edge detection error", {
+                error: edgeError.message,
+                eventId: event.id,
+              });
+            }
+          }
+
+          try {
+            // Constante para conversión de píxeles a minutos
+            const pixelsPerMinute = HOUR_HEIGHT / 60; // 1 pixel por minuto si HOUR_HEIGHT es 60
+
+            // Usar el valor exacto de dy sin redondeo para cálculos de posición
             const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
 
-            // Get original minutes from midnight
+            // Snap to precise timeInterval grid
+            // First get total minutes from start of day for the original event
             const originalMinutesFromMidnight =
               event.start.getHours() * 60 + event.start.getMinutes();
 
-            // Calculate new total minutes
+            // Calculate new raw minutes
             const newMinutesFromMidnight =
               originalMinutesFromMidnight + exactMinuteDiff;
 
@@ -505,129 +431,396 @@ const Event: React.FC<EventProps> = ({
             // Calculate day difference from horizontal movement
             const dayDiff = calculateDayDiff(gestureState.dx);
 
-            // Crear nuevas fechas de inicio y fin con los cambios
-            const newStart = new Date(event.start);
-            const newEnd = new Date(event.end);
+            // Create a new date object for the snap time
+            const snapTime = new Date(event.start);
 
-            // Apply day change first if needed
+            // If we have day difference, apply it first
             if (dayDiff !== 0) {
-              newStart.setDate(newStart.getDate() + dayDiff);
-              newEnd.setDate(newEnd.getDate() + dayDiff);
+              snapTime.setDate(snapTime.getDate() + dayDiff);
             }
 
-            // Apply minute change
-            const durationMs = event.end.getTime() - event.start.getTime();
-
-            // Reset hours and minutes for precise time
-            newStart.setHours(
+            // Reset minutes completely and then add the snapped minutes
+            snapTime.setHours(
               Math.floor(snappedMinutesFromMidnight / 60),
               snappedMinutesFromMidnight % 60,
               0,
               0
             );
 
-            // Set end time based on original duration
-            newEnd.setTime(newStart.getTime() + durationMs);
+            // Define thresholds for when to show previews
+            const VERTICAL_MOVEMENT_THRESHOLD = 5; // Pixels for vertical movement
+            const HORIZONTAL_MOVEMENT_THRESHOLD = 10; // Pixels for horizontal movement
+            const shouldShowVerticalPreview =
+              Math.abs(gestureState.dy) > VERTICAL_MOVEMENT_THRESHOLD;
+            const shouldShowHorizontalPreview =
+              Math.abs(gestureState.dx) > HORIZONTAL_MOVEMENT_THRESHOLD;
 
-            logger.debug("Finalizando arrastre de evento", {
-              eventId: event.id,
-              minuteDiff,
-              dayDiff,
-              originalStart: event.start.toLocaleTimeString(),
-              originalStartDate: event.start.toLocaleDateString(),
-              originalEnd: event.end.toLocaleTimeString(),
-              newStart: newStart.toLocaleTimeString(),
-              newStartDate: newStart.toLocaleDateString(),
-              newEnd: newEnd.toLocaleTimeString(),
-              newEndDate: newEnd.toLocaleDateString(),
-              eventTitle: event.title,
-              leftPosition: left,
-              originalMinutesFromMidnight,
-              snappedMinutesFromMidnight,
-              timeInterval,
-              viewType,
-              dx: gestureState.dx,
-              dy: gestureState.dy,
-            });
-
-            // Safety check - make sure showTimeChangeConfirmation exists
-            if (!showTimeChangeConfirmation) {
-              logger.error(
-                "❌ Cannot show time change confirmation - function not available",
-                {
-                  viewType,
-                  eventId: event.id,
+            // Only update preview elements if we have significant movement
+            if (shouldShowVerticalPreview || shouldShowHorizontalPreview) {
+              try {
+                // Calculate vertical preview position if needed
+                let newPreviewPosition = null;
+                if (shouldShowVerticalPreview) {
+                  newPreviewPosition = calculatePreviewPosition(
+                    gestureState.dy,
+                    minuteDiff
+                  );
                 }
-              );
 
-              // Reset position smoothly
-              Animated.spring(translateY, {
-                toValue: 0,
-                friction: 5,
-                tension: 40,
-                useNativeDriver: true,
-              }).start();
-
-              // Reset horizontal position
-              Animated.spring(translateX, {
-                toValue: 0,
-                friction: 5,
-                tension: 40,
-                useNativeDriver: true,
-              }).start();
-
-              setIsResizing(false);
-              return;
-            }
-
-            // Validar que el destino sea una zona permitida
-            const isValid = validateEventDrag(event, minuteDiff, newStart);
-
-            if (!isValid) {
-              logger.debug(
-                "Arrastre de evento cancelado (destino no disponible)",
-                {
-                  eventId: event.id,
-                  newStart: newStart.toLocaleTimeString(),
-                  newStartDate: newStart.toLocaleDateString(),
-                  minuteDiff,
-                  dayDiff,
-                  viewType,
+                // Calculate horizontal preview position if needed
+                let newHorizontalPosition = null;
+                if (
+                  shouldShowHorizontalPreview &&
+                  viewType !== "day" &&
+                  dayDiff !== 0
+                ) {
+                  newHorizontalPosition = getHorizontalPreviewPosition(dayDiff);
                 }
-              );
 
-              // Reset position smoothly
-              Animated.spring(translateY, {
-                toValue: 0,
-                friction: 5,
-                tension: 40,
-                useNativeDriver: true,
-              }).start();
+                // Log detailed preview positions for debugging
+                if (Math.random() < 0.05) {
+                  // Only log occasionally to reduce spam
+                  logger.debug("Preview positions", {
+                    eventId: event.id,
+                    shouldShowVertical: shouldShowVerticalPreview,
+                    shouldShowHorizontal: shouldShowHorizontalPreview,
+                    verticalPreview: newPreviewPosition,
+                    horizontalPreview: newHorizontalPosition,
+                    dy: gestureState.dy,
+                    dx: gestureState.dx,
+                    dayDiff,
+                    top,
+                    left,
+                    width,
+                    height,
+                  });
+                }
 
-              // Reset horizontal position
-              Animated.spring(translateX, {
-                toValue: 0,
-                friction: 5,
-                tension: 40,
-                useNativeDriver: true,
-              }).start();
+                // Call the parent event drag handler with the snap time
+                if (onEventUpdate) {
+                  try {
+                    // This will only validate if dragging is allowed and update the snap line
+                    const isValid = validateEventDrag(
+                      event,
+                      minuteDiff,
+                      snapTime
+                    );
+                    setIsTargetUnavailable(!isValid);
+                  } catch (validateError: any) {
+                    logger.error("Error validating drag", {
+                      error: validateError.message,
+                      eventId: event.id,
+                    });
+                    // Default to allowing the drag
+                    setIsTargetUnavailable(false);
+                  }
+                }
 
-              setIsResizing(false);
+                // Update preview positions
+                setPreviewPosition(newPreviewPosition);
+                setHorizontalPreviewPosition(newHorizontalPosition);
+              } catch (previewError: any) {
+                logger.error("Error updating preview positions", {
+                  error: previewError.message,
+                  eventId: event.id,
+                });
+                // Clear preview elements on error
+                clearPreviewElements();
+              }
             } else {
-              logger.debug("Mostrando confirmación de cambio de horario", {
+              // Clear preview elements if movement is below threshold
+              clearPreviewElements();
+            }
+          } catch (calcError: any) {
+            logger.error("Calculation error during drag", {
+              error: calcError.message,
+              eventId: event.id,
+              dy: gestureState.dy,
+              dx: gestureState.dx,
+            });
+            // Don't rethrow - we want to continue the drag operation
+          }
+        } catch (moveError: any) {
+          // Log the top-level error but don't crash the app
+          logger.error("❌ CRITICAL ERROR IN onPanResponderMove", {
+            error: moveError.message,
+            eventId: event.id,
+            stack: moveError.stack,
+          });
+
+          // Try to clean up and recover
+          clearPreviewElements();
+        }
+      },
+      onPanResponderRelease: (e, gestureState) => {
+        try {
+          // Primero llamar a onEventDragEnd para detener el auto-scroll
+          if (onEventDragEnd) {
+            onEventDragEnd();
+          }
+
+          // Luego actualizar el estado de resizing
+          setIsResizing(false);
+
+          // Ensure all preview elements are cleared immediately
+          clearPreviewElements();
+
+          // Llamar al drag end handler inmediatamente para parar cualquier autoscroll
+          if (onEventDragEnd) {
+            try {
+              onEventDragEnd();
+            } catch (dragEndError: any) {
+              logger.error("Error calling drag end handler", {
+                error: dragEndError.message,
+                eventId: event.id,
+              });
+              // Continue even if onEventDragEnd fails
+            }
+          }
+
+          // Reset the animation
+          try {
+            Animated.timing(scaleAnim, {
+              toValue: 1,
+              duration: 100,
+              useNativeDriver: true,
+            }).start();
+          } catch (animError: any) {
+            logger.error("Animation error", {
+              error: animError.message,
+              eventId: event.id,
+            });
+            // Continue without animation if it fails
+          }
+
+          setIsPressed(false);
+
+          // Handle the event update only if we had significant movement
+          const MOVEMENT_THRESHOLD = 10; // Pixels
+          const hasMoved =
+            Math.abs(gestureState.dy) > MOVEMENT_THRESHOLD ||
+            Math.abs(gestureState.dx) > MOVEMENT_THRESHOLD;
+
+          if (hasMoved) {
+            try {
+              // Calculate minutes using the same grid-snapping logic as in onPanResponderMove
+              const pixelsPerMinute = HOUR_HEIGHT / 60;
+              const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
+
+              // Get original minutes from midnight
+              const originalMinutesFromMidnight =
+                event.start.getHours() * 60 + event.start.getMinutes();
+
+              // Calculate new total minutes
+              const newMinutesFromMidnight =
+                originalMinutesFromMidnight + exactMinuteDiff;
+
+              // Snap to nearest timeInterval grid point
+              const snappedMinutesFromMidnight =
+                Math.round(newMinutesFromMidnight / timeInterval) *
+                timeInterval;
+
+              // Calculate the final minute difference that maintains the timeInterval grid
+              const minuteDiff =
+                snappedMinutesFromMidnight - originalMinutesFromMidnight;
+
+              // Calculate day difference from horizontal movement
+              const dayDiff = calculateDayDiff(gestureState.dx);
+
+              // Crear nuevas fechas de inicio y fin con los cambios
+              const newStart = new Date(event.start);
+              const newEnd = new Date(event.end);
+
+              // Apply day change first if needed
+              if (dayDiff !== 0) {
+                newStart.setDate(newStart.getDate() + dayDiff);
+                newEnd.setDate(newEnd.getDate() + dayDiff);
+
+                logger.debug("Day change applied", {
+                  eventId: event.id,
+                  dayDiff,
+                  originalDate: event.start.toLocaleDateString(),
+                  newDate: newStart.toLocaleDateString(),
+                });
+              }
+
+              // Apply minute change
+              const durationMs = event.end.getTime() - event.start.getTime();
+
+              // Reset hours and minutes for precise time
+              newStart.setHours(
+                Math.floor(snappedMinutesFromMidnight / 60),
+                snappedMinutesFromMidnight % 60,
+                0,
+                0
+              );
+
+              // Set end time based on original duration
+              newEnd.setTime(newStart.getTime() + durationMs);
+
+              logger.debug("Finalizando arrastre de evento", {
                 eventId: event.id,
                 minuteDiff,
                 dayDiff,
+                originalStart: event.start.toLocaleTimeString(),
+                originalStartDate: event.start.toLocaleDateString(),
+                originalEnd: event.end.toLocaleTimeString(),
                 newStart: newStart.toLocaleTimeString(),
                 newStartDate: newStart.toLocaleDateString(),
                 newEnd: newEnd.toLocaleTimeString(),
                 newEndDate: newEnd.toLocaleDateString(),
                 eventTitle: event.title,
+                leftPosition: left,
+                originalMinutesFromMidnight,
+                snappedMinutesFromMidnight,
+                timeInterval,
                 viewType,
+                dx: gestureState.dx,
+                dy: gestureState.dy,
               });
 
-              // Instead of directly updating the event, show confirmation modal
-              showTimeChangeConfirmation(event, newStart, newEnd);
+              // Safety check - make sure showTimeChangeConfirmation exists
+              if (!showTimeChangeConfirmation) {
+                logger.error(
+                  "❌ Cannot show time change confirmation - function not available",
+                  {
+                    viewType,
+                    eventId: event.id,
+                  }
+                );
+
+                // Reset position smoothly
+                try {
+                  Animated.spring(translateY, {
+                    toValue: 0,
+                    friction: 5,
+                    tension: 40,
+                    useNativeDriver: true,
+                  }).start();
+
+                  // Reset horizontal position
+                  Animated.spring(translateX, {
+                    toValue: 0,
+                    friction: 5,
+                    tension: 40,
+                    useNativeDriver: true,
+                  }).start();
+                } catch (animError: any) {
+                  logger.error("Animation reset error", {
+                    error: animError.message,
+                    eventId: event.id,
+                  });
+                  // Force reset animation values if animation fails
+                  translateY.setValue(0);
+                  translateX.setValue(0);
+                }
+
+                setIsResizing(false);
+                return;
+              }
+
+              // Validar que el destino sea una zona permitida
+              let isValid = false;
+              try {
+                isValid = validateEventDrag(event, minuteDiff, newStart);
+              } catch (validateError: any) {
+                logger.error("Error validating event drag on release", {
+                  error: validateError.message,
+                  eventId: event.id,
+                });
+                // Default to invalid on error
+                isValid = false;
+              }
+
+              if (!isValid) {
+                logger.debug(
+                  "Arrastre de evento cancelado (destino no disponible)",
+                  {
+                    eventId: event.id,
+                    newStart: newStart.toLocaleTimeString(),
+                    newStartDate: newStart.toLocaleDateString(),
+                    minuteDiff,
+                    dayDiff,
+                    viewType,
+                  }
+                );
+
+                // Reset position smoothly
+                try {
+                  Animated.spring(translateY, {
+                    toValue: 0,
+                    friction: 5,
+                    tension: 40,
+                    useNativeDriver: true,
+                  }).start();
+
+                  // Reset horizontal position
+                  Animated.spring(translateX, {
+                    toValue: 0,
+                    friction: 5,
+                    tension: 40,
+                    useNativeDriver: true,
+                  }).start();
+                } catch (animError: any) {
+                  logger.error("Animation reset error", {
+                    error: animError.message,
+                    eventId: event.id,
+                  });
+                  // Force reset animation values if animation fails
+                  translateY.setValue(0);
+                  translateX.setValue(0);
+                }
+
+                setIsResizing(false);
+              } else {
+                logger.debug("Mostrando confirmación de cambio de horario", {
+                  eventId: event.id,
+                  minuteDiff,
+                  dayDiff,
+                  newStart: newStart.toLocaleTimeString(),
+                  newStartDate: newStart.toLocaleDateString(),
+                  newEnd: newEnd.toLocaleTimeString(),
+                  newEndDate: newEnd.toLocaleDateString(),
+                  eventTitle: event.title,
+                  viewType,
+                });
+
+                // Instead of directly updating the event, show confirmation modal
+                try {
+                  // One final explicit call to drag end handler to ensure auto-scroll stops
+                  if (onEventDragEnd) {
+                    onEventDragEnd();
+                  }
+
+                  showTimeChangeConfirmation(event, newStart, newEnd);
+                } catch (modalError: any) {
+                  logger.error("Error showing time change confirmation", {
+                    error: modalError.message,
+                    eventId: event.id,
+                  });
+
+                  // Reset position on modal error
+                  translateY.setValue(0);
+                  translateX.setValue(0);
+                  setIsResizing(false);
+
+                  // Ensure auto-scroll stops even on error
+                  if (onEventDragEnd) {
+                    onEventDragEnd();
+                  }
+                }
+              }
+            } catch (eventUpdateError: any) {
+              logger.error("Error updating event", {
+                error: eventUpdateError.message,
+                eventId: event.id,
+                stack: eventUpdateError.stack,
+              });
+
+              // Reset on error
+              translateY.setValue(0);
+              translateX.setValue(0);
+              setIsResizing(false);
             }
           } else {
             logger.debug(
@@ -639,12 +832,12 @@ const Event: React.FC<EventProps> = ({
                 viewType,
               }
             );
-          }
 
-          // Reset translation
-          translateY.setValue(0);
-          translateX.setValue(0);
-          setIsResizing(false);
+            // Reset translation values
+            translateY.setValue(0);
+            translateX.setValue(0);
+            setIsResizing(false);
+          }
         } catch (error: any) {
           // Critical error handling to prevent app crash
           logger.error("❌ ERROR DURING EVENT DRAG RELEASE", {
@@ -657,6 +850,7 @@ const Event: React.FC<EventProps> = ({
               moveY: gestureState.moveY,
               y0: gestureState.y0,
             },
+            stack: error.stack,
           });
 
           // Reset all states to recover from error
@@ -664,9 +858,7 @@ const Event: React.FC<EventProps> = ({
           translateX.setValue(0);
           setIsResizing(false);
           setIsPressed(false);
-          setPreviewPosition(null);
-          setHorizontalPreviewPosition(null);
-          setIsTargetUnavailable(false);
+          clearPreviewElements();
 
           // Call drag end to ensure parent components are updated
           if (onEventDragEnd) {
@@ -714,8 +906,7 @@ const Event: React.FC<EventProps> = ({
       directPosition,
       originalTop: top,
       previewOffset,
-      finalPreviewTop: directPosition - previewOffset,
-      distanceToEvent: Math.abs(directPosition - previewOffset - (top + dy)),
+      finalPreviewTop: directPosition,
       originalDay: event.start.getDate(),
       newDay: newStart.getDate(), // Debería ser igual que el original
     });
@@ -838,74 +1029,128 @@ const Event: React.FC<EventProps> = ({
     }
   };
 
+  // Render function for preview elements
+  const renderPreviewElements = () => {
+    // Only render if we're actively resizing
+    if (!isResizing) return null;
+
+    return (
+      <>
+        {/* Snap line preview */}
+        {previewPosition !== null && (
+          <View
+            style={[
+              styles.previewLine,
+              {
+                top: previewPosition,
+                borderColor: isTargetUnavailable
+                  ? theme.errorColor
+                  : theme.primaryColor,
+                width: width - 4, // Slightly smaller than the event
+                left: left + 2,
+                borderWidth: connectionLineWidth,
+              },
+            ]}
+          />
+        )}
+
+        {/* Horizontal preview for day changes */}
+        {horizontalPreviewPosition !== null && (
+          <View
+            style={[
+              styles.horizontalPreviewLine,
+              {
+                top: top + height / 2,
+                borderColor: isTargetUnavailable
+                  ? theme.errorColor
+                  : theme.primaryColor,
+                width: columnWidth ? Math.abs(horizontalPreviewPosition) : 0,
+                // Important: Calculate left position based on the direction of movement
+                left:
+                  horizontalPreviewPosition > 0
+                    ? left + width // Moving right, start from right edge of event
+                    : left + horizontalPreviewPosition, // Moving left, adjust left position
+                borderWidth: connectionLineWidth,
+              },
+            ]}
+          />
+        )}
+
+        {/* Preview rectangle/shadow to show destination */}
+        {(previewPosition !== null || horizontalPreviewPosition !== null) && (
+          <View
+            style={[
+              styles.previewRectangle,
+              {
+                top: previewPosition !== null ? previewPosition : top,
+                height: eventHeight,
+                width: width,
+                // Calculate left position for horizontal movement
+                left:
+                  horizontalPreviewPosition !== null
+                    ? horizontalPreviewPosition > 0
+                      ? left + horizontalPreviewPosition // Moving right
+                      : left + horizontalPreviewPosition // Moving left
+                    : left, // No horizontal movement
+                backgroundColor: isTargetUnavailable
+                  ? theme.errorColor + "22" // Add transparency (13%)
+                  : theme.successColor + "22",
+                borderColor: isTargetUnavailable
+                  ? theme.errorColor
+                  : theme.primaryColor,
+                borderWidth: 2, // Make border more visible
+                borderStyle: "dashed",
+              },
+            ]}
+          />
+        )}
+
+        {/* Connection line for vertical movement */}
+        {previewPosition !== null && (
+          <View
+            style={[
+              styles.connectionLine,
+              {
+                top: Math.min(top + height / 2, previewPosition),
+                height: Math.abs(previewPosition - (top + height / 2)),
+                left: left + width / 2,
+                borderColor: isTargetUnavailable
+                  ? theme.errorColor
+                  : theme.primaryColor,
+                borderLeftWidth: connectionLineWidth,
+              },
+            ]}
+          />
+        )}
+
+        {/* Connection line for horizontal movement */}
+        {horizontalPreviewPosition !== null && previewPosition === null && (
+          <View
+            style={[
+              styles.horizontalConnectionLine,
+              {
+                top: top + height / 2,
+                width: Math.abs(horizontalPreviewPosition),
+                // Important: Calculate left position based on the direction of movement
+                left:
+                  horizontalPreviewPosition > 0
+                    ? left + width // Moving right, start from right edge of event
+                    : left + horizontalPreviewPosition + width, // Moving left
+                borderColor: isTargetUnavailable
+                  ? theme.errorColor
+                  : theme.primaryColor,
+                borderTopWidth: connectionLineWidth,
+              },
+            ]}
+          />
+        )}
+      </>
+    );
+  };
+
   return (
     <>
-      {/* Snap line preview */}
-      {previewPosition !== null && (
-        <View
-          style={[
-            styles.previewLine,
-            {
-              top: previewPosition,
-              borderColor: isTargetUnavailable
-                ? theme.errorColor
-                : theme.primaryColor,
-              width: width - 4, // Slightly smaller than the event
-              left: left + 2,
-              borderWidth: connectionLineWidth,
-            },
-          ]}
-        />
-      )}
-
-      {/* Horizontal preview for day changes */}
-      {horizontalPreviewPosition !== null && (
-        <View
-          style={[
-            styles.horizontalPreviewLine,
-            {
-              top: top + height / 2,
-              borderColor: isTargetUnavailable
-                ? theme.errorColor
-                : theme.primaryColor,
-              width: columnWidth ? Math.abs(horizontalPreviewPosition) : 0,
-              left:
-                horizontalPreviewPosition && horizontalPreviewPosition > 0
-                  ? left + width
-                  : horizontalPreviewPosition
-                  ? left + horizontalPreviewPosition
-                  : left,
-              borderWidth: connectionLineWidth,
-            },
-          ]}
-        />
-      )}
-
-      {/* Connection line for preview */}
-      {previewPosition !== null && (
-        <View
-          style={[
-            styles.connectionLine,
-            {
-              top:
-                previewPosition < top + height / 2
-                  ? previewPosition
-                  : top + height / 2,
-              height: Math.abs(previewPosition - (top + height / 2)),
-              left: left + width / 2 - connectionLineWidth / 2,
-              borderWidth: connectionLineWidth,
-              borderColor: isTargetUnavailable
-                ? theme.errorColor
-                : theme.primaryColor,
-              // If previewPosition is above the event, align from top
-              // Otherwise align from bottom
-              alignItems: "center",
-              justifyContent:
-                previewPosition < top + height / 2 ? "flex-start" : "flex-end",
-            },
-          ]}
-        />
-      )}
+      {renderPreviewElements()}
 
       <Animated.View
         onLayout={(e: LayoutChangeEvent) => {
@@ -999,7 +1244,6 @@ const styles = StyleSheet.create({
     height: 0,
     zIndex: 8,
   },
-  // Add horizontal preview line style
   horizontalPreviewLine: {
     position: "absolute",
     borderStyle: "dashed",
@@ -1011,6 +1255,20 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderStyle: "dashed",
     zIndex: 7,
+    width: 0, // Ensure the line is vertical by setting width to 0
+  },
+  horizontalConnectionLine: {
+    position: "absolute",
+    borderStyle: "dashed",
+    height: 0, // Ensure the line is horizontal by setting height to 0
+    zIndex: 7,
+  },
+  previewRectangle: {
+    position: "absolute",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderRadius: 4,
+    zIndex: 6,
   },
 });
 
