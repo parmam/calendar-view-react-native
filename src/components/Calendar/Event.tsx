@@ -32,6 +32,9 @@ interface EventProps {
   onDragNearEdge?: (distanceFromEdge: number, direction: "up" | "down") => void;
   viewHeight?: number;
   scrollPosition: { x: number; y: number };
+  columnWidth?: number;
+  dayIndex?: number;
+  dates?: Date[];
 }
 
 const Event: React.FC<EventProps> = ({
@@ -47,6 +50,9 @@ const Event: React.FC<EventProps> = ({
   onDragNearEdge,
   viewHeight,
   scrollPosition,
+  columnWidth,
+  dayIndex,
+  dates,
 }) => {
   // Initialize logger
   const logger = useLogger("Event");
@@ -85,9 +91,13 @@ const Event: React.FC<EventProps> = ({
   const [isPressed, setIsPressed] = useState(false);
   const [previewPosition, setPreviewPosition] = useState<number | null>(null);
   const [isTargetUnavailable, setIsTargetUnavailable] = useState(false);
+  const [horizontalPreviewPosition, setHorizontalPreviewPosition] = useState<
+    number | null
+  >(null);
 
   // Animation values
   const translateY = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
 
@@ -98,17 +108,23 @@ const Event: React.FC<EventProps> = ({
 
   // Add state to track the current translateY value
   const [currentTranslateY, setCurrentTranslateY] = useState(0);
+  const [currentTranslateX, setCurrentTranslateX] = useState(0);
 
-  // Add a listener to the animated value to track changes
+  // Add a listener to the animated values to track changes
   useEffect(() => {
-    const id = translateY.addListener(({ value }) => {
+    const idY = translateY.addListener(({ value }) => {
       setCurrentTranslateY(value);
     });
 
+    const idX = translateX.addListener(({ value }) => {
+      setCurrentTranslateX(value);
+    });
+
     return () => {
-      translateY.removeListener(id);
+      translateY.removeListener(idY);
+      translateX.removeListener(idX);
     };
-  }, [translateY]);
+  }, [translateY, translateX]);
 
   // Animate event when selected
   useEffect(() => {
@@ -181,6 +197,33 @@ const Event: React.FC<EventProps> = ({
     return isUnavailable;
   };
 
+  // Calculate day difference based on horizontal movement
+  const calculateDayDiff = (dx: number): number => {
+    // If no column width or multi-day view props are provided, return 0
+    if (
+      !columnWidth ||
+      typeof dayIndex !== "number" ||
+      !dates ||
+      viewType === "day"
+    ) {
+      return 0;
+    }
+
+    // Calculate how many columns we've moved
+    const columnsMoved = Math.round(dx / columnWidth);
+
+    // Don't allow moving beyond available dates
+    const newDayIndex = Math.max(
+      0,
+      Math.min(dates.length - 1, dayIndex + columnsMoved)
+    );
+
+    // Calculate actual day difference
+    const dayDiff = newDayIndex - dayIndex;
+
+    return dayDiff;
+  };
+
   // Pan responder for dragging the event
   const panResponder = useRef<PanResponderInstance>(
     PanResponder.create({
@@ -231,8 +274,18 @@ const Event: React.FC<EventProps> = ({
         }
       },
       onPanResponderMove: (e, gestureState) => {
-        // Update position - Only use vertical movement (dy)
+        // Update both vertical and horizontal position
         translateY.setValue(gestureState.dy);
+
+        // Only update horizontal position in multi-day views
+        if (
+          viewType !== "day" &&
+          columnWidth &&
+          typeof dayIndex === "number" &&
+          dates
+        ) {
+          translateX.setValue(gestureState.dx);
+        }
 
         // Calculate current position in the view
         const currentPositionY = top + gestureState.dy;
@@ -257,6 +310,7 @@ const Event: React.FC<EventProps> = ({
               eventTitle: event.title,
               top: top.toFixed(1),
               dy: gestureState.dy.toFixed(1),
+              dx: gestureState.dx.toFixed(1),
               currentPosition: currentPositionY.toFixed(1),
               absolutePosition: absolutePositionY.toFixed(1),
               scrollPosition: scrollPosition.y.toFixed(1),
@@ -330,8 +384,17 @@ const Event: React.FC<EventProps> = ({
         const minuteDiff =
           snappedMinutesFromMidnight - originalMinutesFromMidnight;
 
+        // Calculate day difference from horizontal movement
+        const dayDiff = calculateDayDiff(gestureState.dx);
+
         // Create a new date object for the snap time
         const snapTime = new Date(event.start);
+
+        // If we have day difference, apply it first
+        if (dayDiff !== 0) {
+          snapTime.setDate(snapTime.getDate() + dayDiff);
+        }
+
         // Reset minutes completely and then add the snapped minutes
         snapTime.setHours(
           Math.floor(snappedMinutesFromMidnight / 60),
@@ -341,12 +404,21 @@ const Event: React.FC<EventProps> = ({
         );
 
         // Mostrar previsualización si hay cualquier movimiento significativo
-        if (Math.abs(gestureState.dy) > 1) {
+        if (Math.abs(gestureState.dy) > 1 || Math.abs(gestureState.dx) > 10) {
           // Calcular nueva posición de previsualización usando el valor exacto
           const newPreviewPosition = calculatePreviewPosition(
             gestureState.dy, // Usar directamente el desplazamiento en píxeles
             minuteDiff
           );
+
+          // Calculate horizontal preview position if in multi-day view
+          let newHorizontalPosition = null;
+          if (viewType !== "day" && columnWidth && dayDiff !== 0) {
+            newHorizontalPosition = dayDiff * columnWidth;
+            setHorizontalPreviewPosition(newHorizontalPosition);
+          } else {
+            setHorizontalPreviewPosition(null);
+          }
 
           // Call the parent event drag handler with the snap time
           if (onEventUpdate) {
@@ -360,7 +432,9 @@ const Event: React.FC<EventProps> = ({
             eventId: event.id,
             eventTitle: event.title,
             dy: gestureState.dy,
+            dx: gestureState.dx,
             exactMinuteDiff,
+            dayDiff,
             originalMinutesFromMidnight,
             newMinutesFromMidnight,
             snappedMinutesFromMidnight,
@@ -368,16 +442,20 @@ const Event: React.FC<EventProps> = ({
             snapTimeHour: snapTime.getHours(),
             snapTimeMinute: snapTime.getMinutes(),
             snapTime: snapTime.toLocaleTimeString(),
+            snapDate: snapTime.toLocaleDateString(),
             timeInterval,
             top,
             previewOffset,
             currentTranslateY,
+            currentTranslateX,
             newPreviewPosition,
+            newHorizontalPosition,
           });
 
           setPreviewPosition(newPreviewPosition);
         } else {
           setPreviewPosition(null);
+          setHorizontalPreviewPosition(null);
         }
       },
       onPanResponderRelease: (e, gestureState) => {
@@ -396,10 +474,14 @@ const Event: React.FC<EventProps> = ({
 
           setIsPressed(false);
           setPreviewPosition(null);
+          setHorizontalPreviewPosition(null);
           setIsTargetUnavailable(false);
 
           // Handle the event update
-          if (Math.abs(gestureState.dy) > 10) {
+          if (
+            Math.abs(gestureState.dy) > 10 ||
+            Math.abs(gestureState.dx) > 10
+          ) {
             // Calculate minutes using the same grid-snapping logic as in onPanResponderMove
             const pixelsPerMinute = HOUR_HEIGHT / 60;
             const exactMinuteDiff = gestureState.dy / pixelsPerMinute;
@@ -420,141 +502,132 @@ const Event: React.FC<EventProps> = ({
             const minuteDiff =
               snappedMinutesFromMidnight - originalMinutesFromMidnight;
 
-            if (minuteDiff !== 0) {
-              // Create new date objects to avoid modifying the original
-              const newStart = new Date(event.start);
-              const newEnd = new Date(event.end);
+            // Calculate day difference from horizontal movement
+            const dayDiff = calculateDayDiff(gestureState.dx);
 
-              // Calculate duration in minutes
-              const durationMinutes =
-                event.end.getHours() * 60 +
-                event.end.getMinutes() -
-                (event.start.getHours() * 60 + event.start.getMinutes());
+            // Crear nuevas fechas de inicio y fin con los cambios
+            const newStart = new Date(event.start);
+            const newEnd = new Date(event.end);
 
-              // Set the start time to the snapped time
-              newStart.setHours(
-                Math.floor(snappedMinutesFromMidnight / 60),
-                snappedMinutesFromMidnight % 60,
-                0,
-                0
+            // Apply day change first if needed
+            if (dayDiff !== 0) {
+              newStart.setDate(newStart.getDate() + dayDiff);
+              newEnd.setDate(newEnd.getDate() + dayDiff);
+            }
+
+            // Apply minute change
+            const durationMs = event.end.getTime() - event.start.getTime();
+
+            // Reset hours and minutes for precise time
+            newStart.setHours(
+              Math.floor(snappedMinutesFromMidnight / 60),
+              snappedMinutesFromMidnight % 60,
+              0,
+              0
+            );
+
+            // Set end time based on original duration
+            newEnd.setTime(newStart.getTime() + durationMs);
+
+            logger.debug("Finalizando arrastre de evento", {
+              eventId: event.id,
+              minuteDiff,
+              dayDiff,
+              originalStart: event.start.toLocaleTimeString(),
+              originalStartDate: event.start.toLocaleDateString(),
+              originalEnd: event.end.toLocaleTimeString(),
+              newStart: newStart.toLocaleTimeString(),
+              newStartDate: newStart.toLocaleDateString(),
+              newEnd: newEnd.toLocaleTimeString(),
+              newEndDate: newEnd.toLocaleDateString(),
+              eventTitle: event.title,
+              leftPosition: left,
+              originalMinutesFromMidnight,
+              snappedMinutesFromMidnight,
+              timeInterval,
+              viewType,
+              dx: gestureState.dx,
+              dy: gestureState.dy,
+            });
+
+            // Safety check - make sure showTimeChangeConfirmation exists
+            if (!showTimeChangeConfirmation) {
+              logger.error(
+                "❌ Cannot show time change confirmation - function not available",
+                {
+                  viewType,
+                  eventId: event.id,
+                }
               );
 
-              // Set the end time based on the original duration
-              const endMinutesFromMidnight =
-                snappedMinutesFromMidnight + durationMinutes;
-              newEnd.setHours(
-                Math.floor(endMinutesFromMidnight / 60),
-                endMinutesFromMidnight % 60,
-                0,
-                0
+              // Reset position smoothly
+              Animated.spring(translateY, {
+                toValue: 0,
+                friction: 5,
+                tension: 40,
+                useNativeDriver: true,
+              }).start();
+
+              // Reset horizontal position
+              Animated.spring(translateX, {
+                toValue: 0,
+                friction: 5,
+                tension: 40,
+                useNativeDriver: true,
+              }).start();
+
+              setIsResizing(false);
+              return;
+            }
+
+            // Validar que el destino sea una zona permitida
+            const isValid = validateEventDrag(event, minuteDiff, newStart);
+
+            if (!isValid) {
+              logger.debug(
+                "Arrastre de evento cancelado (destino no disponible)",
+                {
+                  eventId: event.id,
+                  newStart: newStart.toLocaleTimeString(),
+                  newStartDate: newStart.toLocaleDateString(),
+                  minuteDiff,
+                  dayDiff,
+                  viewType,
+                }
               );
 
-              // Ensure the day is preserved (only change time)
-              newStart.setFullYear(event.start.getFullYear());
-              newStart.setMonth(event.start.getMonth());
-              newStart.setDate(event.start.getDate());
+              // Reset position smoothly
+              Animated.spring(translateY, {
+                toValue: 0,
+                friction: 5,
+                tension: 40,
+                useNativeDriver: true,
+              }).start();
 
-              newEnd.setFullYear(event.end.getFullYear());
-              newEnd.setMonth(event.end.getMonth());
-              newEnd.setDate(event.end.getDate());
+              // Reset horizontal position
+              Animated.spring(translateX, {
+                toValue: 0,
+                friction: 5,
+                tension: 40,
+                useNativeDriver: true,
+              }).start();
 
-              logger.debug("Finalizando arrastre de evento", {
+              setIsResizing(false);
+            } else {
+              logger.debug("Mostrando confirmación de cambio de horario", {
                 eventId: event.id,
                 minuteDiff,
-                originalStart: event.start.toLocaleTimeString(),
-                originalStartDate: event.start.toLocaleDateString(),
-                originalEnd: event.end.toLocaleTimeString(),
+                dayDiff,
                 newStart: newStart.toLocaleTimeString(),
                 newStartDate: newStart.toLocaleDateString(),
                 newEnd: newEnd.toLocaleTimeString(),
+                newEndDate: newEnd.toLocaleDateString(),
                 eventTitle: event.title,
-                leftPosition: left, // Aseguramos que mantenemos la misma posición left
-                originalMinutesFromMidnight,
-                snappedMinutesFromMidnight,
-                timeInterval,
                 viewType,
               });
 
-              // Safety check - make sure showTimeChangeConfirmation exists
-              if (!showTimeChangeConfirmation) {
-                logger.error(
-                  "❌ Cannot show time change confirmation - function not available",
-                  {
-                    viewType,
-                    eventId: event.id,
-                  }
-                );
-
-                // Reset position smoothly
-                Animated.spring(translateY, {
-                  toValue: 0,
-                  friction: 5,
-                  tension: 40,
-                  useNativeDriver: true,
-                }).start();
-
-                setIsResizing(false);
-                return;
-              }
-
-              // Verificar si la nueva posición está en un rango no disponible
-              if (isTimeSlotUnavailable(newStart)) {
-                // Si el destino no está disponible, aplicar feedback háptico de error
-                if (hapticOptions?.enabled && hapticOptions.error) {
-                  try {
-                    require("expo-haptics").notificationAsync(
-                      require("expo-haptics").NotificationFeedbackType.Error
-                    );
-                    logger.debug("Feedback háptico de error aplicado", {
-                      eventId: event.id,
-                      reason: "hora no disponible",
-                    });
-                  } catch (e) {
-                    logger.debug("Haptic feedback failed", { error: e });
-                  }
-                }
-
-                // Animar de vuelta a la posición original
-                Animated.spring(translateY, {
-                  toValue: 0,
-                  friction: 5,
-                  tension: 40,
-                  useNativeDriver: true,
-                }).start();
-
-                // No actualizar si está en una zona no disponible
-                logger.debug(
-                  "Reubicación de evento rechazada - horario no disponible",
-                  {
-                    eventId: event.id,
-                    newStart: newStart.toLocaleTimeString(),
-                    eventTitle: event.title,
-                    dayOfWeek: newStart.getDay(),
-                    timeValue: newStart.getHours() + newStart.getMinutes() / 60,
-                  }
-                );
-              } else {
-                logger.debug("Mostrando confirmación de cambio de horario", {
-                  eventId: event.id,
-                  minuteDiff,
-                  newStart: newStart.toLocaleTimeString(),
-                  newEnd: newEnd.toLocaleTimeString(),
-                  eventTitle: event.title,
-                  viewType,
-                });
-
-                // Instead of directly updating the event, show confirmation modal
-                showTimeChangeConfirmation(event, newStart, newEnd);
-              }
-            } else {
-              logger.debug(
-                "Arrastre de evento cancelado (movimiento insuficiente)",
-                {
-                  eventId: event.id,
-                  dy: gestureState.dy,
-                  viewType,
-                }
-              );
+              // Instead of directly updating the event, show confirmation modal
+              showTimeChangeConfirmation(event, newStart, newEnd);
             }
           } else {
             logger.debug(
@@ -562,6 +635,7 @@ const Event: React.FC<EventProps> = ({
               {
                 eventId: event.id,
                 dy: gestureState.dy,
+                dx: gestureState.dx,
                 viewType,
               }
             );
@@ -569,6 +643,7 @@ const Event: React.FC<EventProps> = ({
 
           // Reset translation
           translateY.setValue(0);
+          translateX.setValue(0);
           setIsResizing(false);
         } catch (error: any) {
           // Critical error handling to prevent app crash
@@ -578,6 +653,7 @@ const Event: React.FC<EventProps> = ({
             viewType,
             gestureState: {
               dy: gestureState.dy,
+              dx: gestureState.dx,
               moveY: gestureState.moveY,
               y0: gestureState.y0,
             },
@@ -585,9 +661,11 @@ const Event: React.FC<EventProps> = ({
 
           // Reset all states to recover from error
           translateY.setValue(0);
+          translateX.setValue(0);
           setIsResizing(false);
           setIsPressed(false);
           setPreviewPosition(null);
+          setHorizontalPreviewPosition(null);
           setIsTargetUnavailable(false);
 
           // Call drag end to ensure parent components are updated
@@ -695,7 +773,7 @@ const Event: React.FC<EventProps> = ({
   )}`;
 
   // Background color based on the event color or default color
-  const backgroundColor = event.color || theme.eventColors[0];
+  const backgroundColor = event.color || theme.primaryColor;
 
   // Ajustar oscuridad del texto basado en el color de fondo
   const getContrastText = (bgColor: string) => {
@@ -762,208 +840,177 @@ const Event: React.FC<EventProps> = ({
 
   return (
     <>
-      {/* Evento principal */}
+      {/* Snap line preview */}
+      {previewPosition !== null && (
+        <View
+          style={[
+            styles.previewLine,
+            {
+              top: previewPosition,
+              borderColor: isTargetUnavailable
+                ? theme.errorColor
+                : theme.primaryColor,
+              width: width - 4, // Slightly smaller than the event
+              left: left + 2,
+              borderWidth: connectionLineWidth,
+            },
+          ]}
+        />
+      )}
+
+      {/* Horizontal preview for day changes */}
+      {horizontalPreviewPosition !== null && (
+        <View
+          style={[
+            styles.horizontalPreviewLine,
+            {
+              top: top + height / 2,
+              borderColor: isTargetUnavailable
+                ? theme.errorColor
+                : theme.primaryColor,
+              width: columnWidth ? Math.abs(horizontalPreviewPosition) : 0,
+              left:
+                horizontalPreviewPosition && horizontalPreviewPosition > 0
+                  ? left + width
+                  : horizontalPreviewPosition
+                  ? left + horizontalPreviewPosition
+                  : left,
+              borderWidth: connectionLineWidth,
+            },
+          ]}
+        />
+      )}
+
+      {/* Connection line for preview */}
+      {previewPosition !== null && (
+        <View
+          style={[
+            styles.connectionLine,
+            {
+              top:
+                previewPosition < top + height / 2
+                  ? previewPosition
+                  : top + height / 2,
+              height: Math.abs(previewPosition - (top + height / 2)),
+              left: left + width / 2 - connectionLineWidth / 2,
+              borderWidth: connectionLineWidth,
+              borderColor: isTargetUnavailable
+                ? theme.errorColor
+                : theme.primaryColor,
+              // If previewPosition is above the event, align from top
+              // Otherwise align from bottom
+              alignItems: "center",
+              justifyContent:
+                previewPosition < top + height / 2 ? "flex-start" : "flex-end",
+            },
+          ]}
+        />
+      )}
+
       <Animated.View
-        onLayout={onLayout}
+        onLayout={(e: LayoutChangeEvent) => {
+          setEventHeight(e.nativeEvent.layout.height);
+        }}
+        {...panResponder.panHandlers}
         style={[
-          styles.container,
+          styles.event,
           {
-            backgroundColor,
             width,
             left,
             top,
-            height: eventHeight,
-            borderLeftWidth: 3,
-            borderLeftColor: backgroundColor,
-            transform: [{ translateY: translateY }, { scale: scaleAnim }],
-            zIndex: isPressed || previewPosition !== null ? 50 : 10, // Aumentar z-index cuando está seleccionado o arrastrando pero menos que el preview
-            opacity: previewPosition !== null ? 0.8 : width < 60 ? 0.9 : 1, // Más transparente durante el arrastre
-            shadowOpacity: isPressed ? 0.4 : 0.2, // Más sombra cuando está seleccionado
+            height,
+            backgroundColor: event.color || theme.primaryColor,
+            // Apply transforms and opacity based on interactions
+            transform: [
+              { translateY },
+              { translateX }, // Add horizontal transform
+              { scale: scaleAnim },
+            ],
+            opacity: isTargetUnavailable ? 0.5 : opacityAnim,
+            // Add borders and shadows for pressed state
+            ...(isPressed
+              ? {
+                  borderWidth: 2,
+                  borderColor: isTargetUnavailable
+                    ? theme.errorColor
+                    : theme.successColor,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 2,
+                  elevation: 5,
+                }
+              : {}),
           },
         ]}
-        {...panResponder.panHandlers}
       >
-        <View style={styles.resizeHandle} />
-
         <TouchableOpacity
-          style={styles.contentContainer}
+          style={styles.eventContent}
           onPress={handleEventPress}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
+          disabled={isResizing}
         >
           <Text
             style={[
-              styles.title,
-              {
-                color: textColor,
-                fontSize: width < 50 ? 8 : width < 70 ? 9 : 12, // Ajuste dinámico del tamaño de fuente
-                fontWeight: width < 50 ? "500" : "600", // Reducir peso de fuente en eventos estrechos
-              },
+              styles.eventTitle,
+              { color: getContrastText(event.color || theme.primaryColor) },
             ]}
             numberOfLines={1}
-            ellipsizeMode="tail"
           >
             {event.title}
           </Text>
-
-          {/* Solo mostrar hora si hay suficiente espacio */}
-          {eventHeight >= 35 && width >= 45 && (
-            <Text
-              style={[
-                styles.time,
-                {
-                  color: textColor,
-                  fontSize: width < 50 ? 7 : width < 80 ? 8 : 10,
-                  opacity: width < 60 ? 0.7 : 0.8,
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {formatTime(event.start, locale)}
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.resizeHandle} />
-      </Animated.View>
-
-      {/* Indicador de destino cuando se arrastra el evento - rendered last for proper stacking */}
-      {previewPosition !== null && (
-        <>
-          {/* Línea de conexión entre el evento original y la previsualización */}
-          <View
-            style={{
-              position: "absolute",
-              left: left + width / 2, // Centrado horizontalmente
-              top: Math.min(
-                top + currentTranslateY,
-                previewPosition - previewOffset
-              ),
-              width: connectionLineWidth,
-              height: Math.max(
-                5,
-                Math.abs(
-                  top + currentTranslateY - (previewPosition - previewOffset)
-                )
-              ),
-              backgroundColor: isTargetUnavailable
-                ? theme.errorColor || "#F44336"
-                : theme.connectionLineColor || backgroundColor,
-              opacity: 0.7,
-              zIndex: 99,
-              elevation: 9, // Slightly lower than the preview but higher than regular events
-            }}
-          />
-
-          <Animated.View
+          <Text
             style={[
-              styles.previewContainer,
-              {
-                backgroundColor: isTargetUnavailable
-                  ? theme.errorColor || "rgba(244, 67, 54, 0.4)"
-                  : theme.dragMovePreviewColor || "rgba(33, 150, 243, 0.4)",
-                borderColor: isTargetUnavailable
-                  ? theme.errorColor || "#F44336"
-                  : backgroundColor,
-                width,
-                left,
-                // Posición exacta: posición original + desplazamiento del drag - offset del preview
-                top: previewPosition - previewOffset,
-                height: eventHeight,
-                opacity: 0.7,
-                zIndex: 100,
-                elevation: 10,
-              },
+              styles.eventTime,
+              { color: getContrastText(event.color || theme.primaryColor) },
             ]}
+            numberOfLines={1}
           >
-            <View style={styles.previewContent}>
-              <Text
-                style={[
-                  styles.previewTitle,
-                  {
-                    fontSize: width < 50 ? 8 : width < 70 ? 9 : 12,
-                    fontWeight: width < 50 ? "500" : "600",
-                    color: isTargetUnavailable ? "#FFFFFF" : "#333333",
-                  },
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {isTargetUnavailable ? "Hora no disponible" : event.title}
-              </Text>
-              {eventHeight >= 35 && width >= 45 && !isTargetUnavailable && (
-                <Text
-                  style={[
-                    styles.previewTime,
-                    {
-                      fontSize: width < 50 ? 7 : width < 80 ? 8 : 10,
-                      opacity: width < 60 ? 0.7 : 0.8,
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {formatTime(event.start, locale)}
-                </Text>
-              )}
-            </View>
-          </Animated.View>
-        </>
-      )}
+            {formatTime(event.start, locale)} - {formatTime(event.end, locale)}
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
     </>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  event: {
     position: "absolute",
     borderRadius: 4,
     overflow: "hidden",
-    margin: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 3,
+    zIndex: 10,
   },
-  previewContainer: {
-    position: "absolute",
-    borderRadius: 4,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    margin: 1,
-    pointerEvents: "none",
-    elevation: 10,
-  },
-  previewContent: {
+  eventContent: {
     flex: 1,
     padding: 4,
     justifyContent: "center",
   },
-  previewTitle: {
-    fontWeight: "600",
-    color: "#333333",
-  },
-  previewTime: {
-    color: "#333333",
-    marginTop: 2,
-    opacity: 0.7,
-  },
-  contentContainer: {
-    flex: 1,
-    padding: 4,
-    justifyContent: "center",
-  },
-  title: {
-    fontWeight: "600",
+  eventTitle: {
+    fontWeight: "bold",
     fontSize: 12,
   },
-  time: {
+  eventTime: {
     fontSize: 10,
-    marginTop: 2,
-    opacity: 0.8,
   },
-  resizeHandle: {
-    height: 6,
-    width: "100%",
+  previewLine: {
+    position: "absolute",
+    borderStyle: "dashed",
+    height: 0,
+    zIndex: 8,
+  },
+  // Add horizontal preview line style
+  horizontalPreviewLine: {
+    position: "absolute",
+    borderStyle: "dashed",
+    height: 0,
+    zIndex: 8,
+  },
+  connectionLine: {
+    position: "absolute",
+    borderLeftWidth: 1,
+    borderStyle: "dashed",
+    zIndex: 7,
   },
 });
 

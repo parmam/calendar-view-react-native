@@ -4,6 +4,25 @@ import { useCalendar } from "./CalendarContext";
 import { formatTime } from "./utils";
 import { useLogger } from "./utils/logger";
 
+// Helper function to format dates in a human-readable way
+const formatDate = (date: Date, locale: string): string => {
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  };
+  return date.toLocaleDateString(locale, options);
+};
+
+// Check if two dates are on the same day
+const isSameDay = (date1: Date, date2: Date): boolean => {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+};
+
 const TimeChangeConfirmationModal: React.FC = () => {
   // Add logger
   const logger = useLogger("TimeChangeConfirmationModal");
@@ -29,6 +48,9 @@ const TimeChangeConfirmationModal: React.FC = () => {
         oldEnd: event.end.toLocaleTimeString(),
         newStart: newStart.toLocaleTimeString(),
         newEnd: newEnd.toLocaleTimeString(),
+        oldDate: event.start.toLocaleDateString(),
+        newDate: newStart.toLocaleDateString(),
+        dayChanged: !isSameDay(event.start, newStart),
         viewType,
       });
     }
@@ -85,6 +107,18 @@ const TimeChangeConfirmationModal: React.FC = () => {
   const newStartTime = formatTime(newStart, locale);
   const newEndTime = formatTime(newEnd, locale);
 
+  // Check if day has changed
+  const dayChanged = !isSameDay(event.start, newStart);
+
+  // Format dates if day has changed
+  const oldDate = formatDate(event.start, locale);
+  const newDate = formatDate(newStart, locale);
+
+  // Set appropriate modal title based on what changed
+  const modalTitle = dayChanged
+    ? "Confirmar cambio de día y horario"
+    : "Confirmar cambio de horario";
+
   return (
     <Modal
       transparent={true}
@@ -97,13 +131,39 @@ const TimeChangeConfirmationModal: React.FC = () => {
           style={[styles.modalView, { backgroundColor: theme.backgroundColor }]}
         >
           <Text style={[styles.title, { color: theme.textColor }]}>
-            Confirmar cambio de horario
+            {modalTitle}
           </Text>
 
           <View style={styles.eventInfo}>
             <Text style={[styles.eventTitle, { color: theme.textColor }]}>
               {event.title}
             </Text>
+
+            {dayChanged && (
+              <>
+                <View style={styles.timeRow}>
+                  <Text style={[styles.timeLabel, { color: theme.textColor }]}>
+                    Día actual:
+                  </Text>
+                  <Text style={[styles.timeValue, { color: theme.textColor }]}>
+                    {oldDate}
+                  </Text>
+                </View>
+                <View style={styles.timeRow}>
+                  <Text style={[styles.timeLabel, { color: theme.textColor }]}>
+                    Nuevo día:
+                  </Text>
+                  <Text
+                    style={[
+                      styles.timeValue,
+                      { color: theme.primaryColor, fontWeight: "bold" },
+                    ]}
+                  >
+                    {newDate}
+                  </Text>
+                </View>
+              </>
+            )}
 
             <View style={styles.timeRow}>
               <Text style={[styles.timeLabel, { color: theme.textColor }]}>

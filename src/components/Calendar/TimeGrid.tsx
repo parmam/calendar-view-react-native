@@ -1556,6 +1556,9 @@ const TimeGrid: React.FC<TimeGridProps> = ({
                   onDragNearEdge={handleDragNearEdge}
                   viewHeight={scrollViewHeight}
                   scrollPosition={scrollPosition}
+                  columnWidth={columnWidth}
+                  dayIndex={dayIndex}
+                  dates={dates}
                 />
               );
             }
