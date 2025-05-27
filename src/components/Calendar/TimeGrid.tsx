@@ -414,8 +414,21 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     // Update ref immediately for animation frame checks
     autoScrollingRef.current = newScrollState;
 
-    // Update state for component re-renders
-    setAutoScrolling(newScrollState);
+    // Update state for component re-renders - usando objeto nuevo para forzar actualización
+    setAutoScrolling({ ...newScrollState });
+
+    // Intento agresivo de detener cualquier animación
+    try {
+      // Cancelar cualquier frame de animación pendiente
+      if (typeof window !== "undefined" && window.cancelAnimationFrame) {
+        // Esta es una manera general de intentar detener cualquier animación
+        for (let i = 0; i < 10; i++) {
+          window.cancelAnimationFrame(i);
+        }
+      }
+    } catch (e) {
+      logger.debug("Error cancelando animaciones", { error: e });
+    }
 
     // Ocultar la línea de snap cuando termina el arrastre
     if (localSnapLineIndicator) {
@@ -435,7 +448,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     localSnapLineIndicator,
   ]);
 
-  // Función mejorada para handleDragNearEdge
+  // Función mejorada para handleDragNearEdge con mejor detección bidireccional
   const handleDragNearEdge = useCallback(
     (distanceFromEdge: number, direction: "up" | "down") => {
       try {
@@ -453,11 +466,12 @@ const TimeGrid: React.FC<TimeGridProps> = ({
         // Obtener configuración de auto-scroll desde calendarConfig o usar valores por defecto
         const autoScrollConfig = calendarConfig?.autoScrollConfig || {
           enabled: true,
-          edgeThreshold: 100,
-          speed: 3,
-          constant: true,
-          acceleration: 0.2,
-          maxSpeed: 8,
+          edgeThreshold: 80,
+          safeAreaSize: 150,
+          speed: 4,
+          constant: false,
+          acceleration: 0.3,
+          maxSpeed: 10,
           minSpeed: 2,
           frameInterval: 16,
         };
@@ -467,7 +481,36 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           return;
         }
 
+        // Obtener parámetros de configuración
         const edgeThreshold = autoScrollConfig.edgeThreshold;
+        const safeAreaSize = autoScrollConfig.safeAreaSize;
+
+        // Verificar si estamos en la zona segura (área central donde no se activa el auto-scroll)
+        if (
+          safeAreaSize > 0 &&
+          distanceFromEdge > edgeThreshold &&
+          distanceFromEdge < safeAreaSize
+        ) {
+          if (autoScrolling.active) {
+            logger.debug("🛑 IN SAFE AREA: Stopping auto-scroll", {
+              distanceFromEdge,
+              direction,
+              safeAreaSize,
+              viewType,
+            });
+
+            // Detener el auto-scroll
+            const newScrollState = {
+              active: false,
+              direction: null,
+              speed: 0,
+            };
+
+            autoScrollingRef.current = newScrollState;
+            setAutoScrolling(newScrollState);
+          }
+          return;
+        }
 
         // Solo activar scroll si estamos dentro del umbral
         if (distanceFromEdge > edgeThreshold) {
@@ -495,7 +538,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           return;
         }
 
-        // Calcular la velocidad del scroll según la configuración
+        // Calcular la velocidad del scroll según la configuración y la dirección
         let scrollSpeed;
 
         if (autoScrollConfig.constant) {
@@ -509,7 +552,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
             distanceFromEdge / edgeThreshold
           );
 
-          // Apply acceleration curve
+          // Apply acceleration curve - cuanto más cerca del borde, más rápido
           scrollSpeed =
             autoScrollConfig.maxSpeed *
             Math.pow(1 - normalizedDistance, autoScrollConfig.acceleration);
@@ -521,25 +564,38 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           scrollSpeed = Math.round(scrollSpeed * 10) / 10;
         }
 
-        // Activar el auto-scroll con la velocidad calculada
+        // Asegurar que la dirección sea correcta según qué borde estamos cerca
+        // Esto garantiza que el scroll siempre va en la dirección esperada
+        // CLAVE: Aquí respetamos la dirección proporcionada por Event.tsx
+
+        // Activar el auto-scroll con la dirección y velocidad calculadas
         const newScrollState = {
           active: true,
-          direction: direction,
+          direction: direction, // Usar exactamente la dirección proporcionada
           speed: scrollSpeed,
         };
 
         autoScrollingRef.current = newScrollState;
         setAutoScrolling(newScrollState);
 
-        logger.debug("👉 EDGE DETECTED:", {
-          direction,
-          distanceFromEdge: distanceFromEdge.toFixed(1),
-          scrollSpeed: scrollSpeed.toFixed(1),
-          scrollPosition: scrollPosition.y.toFixed(1),
-          edgeThreshold,
-          isConstantSpeed: autoScrollConfig.constant,
-          viewType,
-        });
+        // Log más claro y específico de cada dirección
+        if (direction === "up") {
+          logger.debug("⬆️ SCROLL UP ACTIVATED:", {
+            direction: "UP",
+            distanceFromEdge: distanceFromEdge.toFixed(1),
+            scrollSpeed: scrollSpeed.toFixed(1),
+            scrollPosition: scrollPosition.y.toFixed(1),
+            isConstantSpeed: autoScrollConfig.constant,
+          });
+        } else {
+          logger.debug("⬇️ SCROLL DOWN ACTIVATED:", {
+            direction: "DOWN",
+            distanceFromEdge: distanceFromEdge.toFixed(1),
+            scrollSpeed: scrollSpeed.toFixed(1),
+            scrollPosition: scrollPosition.y.toFixed(1),
+            isConstantSpeed: autoScrollConfig.constant,
+          });
+        }
       } catch (error: any) {
         logger.error("❌ EDGE DETECTION ERROR", {
           error: error.message,
@@ -644,6 +700,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     const autoScrollConfig = calendarConfig?.autoScrollConfig || {
       enabled: true,
       edgeThreshold: 100,
+      safeAreaSize: 200,
       speed: 3,
       constant: true,
       acceleration: 0.2,
@@ -731,12 +788,40 @@ const TimeGrid: React.FC<TimeGridProps> = ({
           return;
         }
 
-        // SIMPLIFICADO: Usar una velocidad constante sin cálculos complejos
-        // Esto evita rebotes y hace que el movimiento sea predecible
+        // Determinar la dirección y velocidad del scroll basado en la configuración
+        const isConstantSpeed = autoScrollConfig.constant;
+
+        // Calcular velocidad - Si es constante, usar el valor configurado,
+        // de lo contrario usar la velocidad que aumenta con la cercanía al borde
+        let effectiveSpeed = autoScrolling.speed;
+
+        // En la nueva lógica de cuartiles, queremos asegurar que:
+        // - En el cuarto superior: scroll va hacia arriba (negativo)
+        // - En el cuarto inferior: scroll va hacia abajo (positivo)
+        // - La velocidad aumenta cuando nos acercamos a los bordes de la pantalla
+
+        // Determinar el delta (positivo para scroll hacia abajo, negativo para scroll hacia arriba)
         const delta =
           autoScrolling.direction === "up"
-            ? -autoScrolling.speed
-            : autoScrolling.speed;
+            ? -effectiveSpeed // Negativo para ir hacia arriba
+            : effectiveSpeed; // Positivo para ir hacia abajo
+
+        // Log direccional para debug con emojis específicos para cada dirección
+        if (Math.random() < 0.02) {
+          if (autoScrolling.direction === "up") {
+            logger.debug("⬆️ SCROLL UP", {
+              delta: delta.toFixed(2),
+              speed: effectiveSpeed.toFixed(2),
+              currentPosition: scrollPosition.y.toFixed(0),
+            });
+          } else {
+            logger.debug("⬇️ SCROLL DOWN", {
+              delta: delta.toFixed(2),
+              speed: effectiveSpeed.toFixed(2),
+              currentPosition: scrollPosition.y.toFixed(0),
+            });
+          }
+        }
 
         // Actualizar timestamp para mantener la referencia del tiempo
         lastTimestamp = timestamp;
@@ -779,6 +864,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
               currentPosition: currentY.toFixed(1),
               newPosition: newY.toFixed(1),
               constant: autoScrollConfig.constant,
+              change: (newY - currentY).toFixed(1),
               boundaries: {
                 hitTop: newY <= minScrollY,
                 hitBottom: newY >= maxScrollY,
@@ -858,6 +944,9 @@ const TimeGrid: React.FC<TimeGridProps> = ({
       speed: autoScrolling.speed,
       timeRange: { start: startHour, end: endHour },
       viewType,
+      safeAreaSize: autoScrollConfig.safeAreaSize,
+      constant: autoScrollConfig.constant,
+      edgeThreshold: autoScrollConfig.edgeThreshold,
     });
 
     // Cleanup on unmount or when scrolling stops

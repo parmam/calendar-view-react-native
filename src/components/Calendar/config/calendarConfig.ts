@@ -262,6 +262,10 @@ export const DEFAULT_DRAG_PREVIEW_CONFIG: DragPreviewConfig = {
  * edgeThreshold: Distancia en píxeles desde el borde que activa el auto-scroll.
  *                Un valor mayor inicia el scroll cuando el cursor está más lejos del borde.
  *
+ * safeAreaSize: Tamaño en píxeles de la zona segura central donde no se activa el auto-scroll.
+ *               Define un área en el centro de la pantalla donde el arrastre no activa el auto-scroll.
+ *               Un valor de 0 desactiva la zona segura.
+ *
  * speed: Velocidad base del auto-scroll en píxeles por frame.
  *        Establece la velocidad general del desplazamiento.
  *
@@ -280,14 +284,16 @@ export const DEFAULT_DRAG_PREVIEW_CONFIG: DragPreviewConfig = {
  * frameInterval: Intervalo de tiempo entre frames de animación en milisegundos.
  *                Controla la suavidad de la animación.
  */
+// Configuración optimizada para el autoscroll basado en cuartiles
 export const DEFAULT_AUTO_SCROLL_CONFIG = {
   enabled: true,
-  edgeThreshold: 100,
-  speed: 3,
-  constant: true,
-  acceleration: 0.2,
-  maxSpeed: 8,
-  minSpeed: 2,
+  edgeThreshold: 50, // No se usa con la nueva lógica de cuartiles, pero dejamos un valor por compatibilidad
+  safeAreaSize: 0, // No usamos zona segura con la lógica de cuartiles
+  speed: 5, // Velocidad base aumentada
+  constant: false, // Usamos aceleración no lineal para un scroll más natural
+  acceleration: 0.4, // Mayor aceleración para mejor respuesta
+  maxSpeed: 12, // Velocidad máxima aumentada
+  minSpeed: 3, // Velocidad mínima aumentada para mejor respuesta
   frameInterval: 16, // ~60fps
 };
 

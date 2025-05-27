@@ -347,6 +347,18 @@ const Event: React.FC<EventProps> = ({
           // Check if we're near the edges and should trigger auto-scrolling
           if (viewHeight && onDragNearEdge) {
             try {
+              // Obtener configuración de auto-scroll si está disponible
+              const autoScrollConfig = calendarConfig?.autoScrollConfig || {
+                enabled: true,
+                edgeThreshold: 100,
+                safeAreaSize: 200,
+                speed: 3,
+                constant: true,
+              };
+
+              // Solo continuar si auto-scroll está habilitado
+              if (!autoScrollConfig.enabled) return;
+
               // Distance from top edge
               const distanceFromTop = absolutePositionY;
 
@@ -354,8 +366,40 @@ const Event: React.FC<EventProps> = ({
               const distanceFromBottom =
                 viewHeight - (absolutePositionY + eventHeight);
 
-              // Edge detection threshold (in pixels)
-              const edgeThreshold = 120; // Increased to match TimeGrid's threshold
+              // Calcular el centro de la vista
+              const viewCenter = viewHeight / 2;
+
+              // Calcular qué tan lejos está el evento del centro de la vista
+              const distanceFromCenter =
+                absolutePositionY + eventHeight / 2 - viewCenter;
+              const absDistanceFromCenter = Math.abs(distanceFromCenter);
+
+              // Determinar la dirección real en relación al centro (importante para el scroll bidireccional)
+              // Si el evento está por encima del centro, es "up"; si está por debajo, es "down"
+              const positionRelativeToCenter =
+                distanceFromCenter < 0 ? "up" : "down";
+
+              // Verificar si el evento está en la zona segura central
+              const isInSafeArea =
+                absDistanceFromCenter < autoScrollConfig.safeAreaSize / 2;
+
+              // Si está en la zona segura, no activar auto-scroll
+              if (isInSafeArea) {
+                // Solo logear ocasionalmente para reducir spam
+                if (Math.random() < 0.01) {
+                  logger.debug("📏 EVENT IN SAFE AREA - NO AUTO-SCROLL", {
+                    eventId: event.id,
+                    distanceFromCenter,
+                    positionRelativeToCenter,
+                    absDistanceFromCenter,
+                    safeAreaSize: autoScrollConfig.safeAreaSize / 2,
+                  });
+                }
+                return;
+              }
+
+              // Edge detection threshold desde la configuración
+              const edgeThreshold = autoScrollConfig.edgeThreshold;
 
               // Enhanced edge detection logic for smoother scrolling
               // 1. Calculate how far into the edge zone we are (0-1 range)
@@ -379,21 +423,90 @@ const Event: React.FC<EventProps> = ({
                   distanceFromBottom: distanceFromBottom.toFixed(1),
                   topEdgeRatio: topEdgeRatio.toFixed(2),
                   bottomEdgeRatio: bottomEdgeRatio.toFixed(2),
+                  isInSafeArea,
+                  distanceFromCenter: distanceFromCenter.toFixed(1),
                 });
               }
 
-              // 3. Smoother transition for edge detection
-              // If we're in the edge zone at all, start triggering auto-scroll
-              if (topEdgeRatio > 0) {
-                // Call onDragNearEdge with the exact distance
+              // 3. Determinar la dirección del scroll basado en la posición del cursor y la dirección del arrastre
+              // La clave es que el scroll debe seguir la dirección del movimiento
+
+              // Determinar si el arrastre va hacia arriba o hacia abajo
+              const dragDirection = gestureState.dy < 0 ? "up" : "down";
+
+              logger.debug("🧭 DRAG DIRECTION", {
+                eventId: event.id,
+                dragDy: gestureState.dy,
+                dragDirection,
+                topEdgeRatio,
+                bottomEdgeRatio,
+              });
+
+              // SOLUCIÓN REDISEÑADA según requisitos específicos:
+              // - Si estamos en el 25% superior → scroll hacia arriba (horarios pasados)
+              // - Si estamos en el 25% inferior → scroll hacia abajo (horarios futuros)
+              // - Si estamos en el 50% central → no hay auto-scroll
+
+              // Calcular en qué sección de la pantalla estamos
+              const topQuarter = viewHeight * 0.25;
+              const bottomQuarter = viewHeight * 0.75;
+
+              // Calcular posición relativa del evento en la pantalla
+              const eventPositionRatio = absolutePositionY / viewHeight;
+
+              // Estamos en el 25% superior de la pantalla
+              if (absolutePositionY < topQuarter) {
+                // Calculamos qué tan cerca estamos del borde (0 = en el borde, 1 = lejos)
+                const distanceRatio = absolutePositionY / topQuarter;
+                // Menor distancia = mayor velocidad de scroll
+                const effectiveDistance = Math.max(1, distanceFromTop);
+
                 if (typeof onDragNearEdge === "function") {
-                  onDragNearEdge(distanceFromTop, "up");
+                  onDragNearEdge(effectiveDistance, "up");
+
+                  logger.debug("⬆️ TOP QUARTER SCROLL", {
+                    eventId: event.id,
+                    absoluteY: absolutePositionY,
+                    viewHeight,
+                    quarter: "TOP 25%",
+                    positionRatio: eventPositionRatio.toFixed(2),
+                    direction: "UP",
+                  });
                 }
-              } else if (bottomEdgeRatio > 0) {
-                // Call onDragNearEdge with the exact distance
+              }
+              // Estamos en el 25% inferior de la pantalla
+              else if (absolutePositionY > bottomQuarter) {
+                // Calculamos qué tan cerca estamos del borde (0 = en el borde, 1 = lejos)
+                const distanceRatio =
+                  (viewHeight - absolutePositionY) / (viewHeight * 0.25);
+                // Menor distancia = mayor velocidad de scroll
+                const effectiveDistance = Math.max(1, distanceFromBottom);
+
                 if (typeof onDragNearEdge === "function") {
-                  onDragNearEdge(distanceFromBottom, "down");
+                  onDragNearEdge(effectiveDistance, "down");
+
+                  logger.debug("⬇️ BOTTOM QUARTER SCROLL", {
+                    eventId: event.id,
+                    absoluteY: absolutePositionY,
+                    viewHeight,
+                    quarter: "BOTTOM 25%",
+                    positionRatio: eventPositionRatio.toFixed(2),
+                    direction: "DOWN",
+                  });
                 }
+              }
+              // Estamos en el 50% central de la pantalla - detener el scroll
+              else if (typeof onDragNearEdge === "function" && onEventDragEnd) {
+                // Detener cualquier auto-scroll activo
+                onEventDragEnd();
+
+                logger.debug("⏹️ CENTER AREA - NO SCROLL", {
+                  eventId: event.id,
+                  absoluteY: absolutePositionY,
+                  viewHeight,
+                  quarter: "MIDDLE 50%",
+                  positionRatio: eventPositionRatio.toFixed(2),
+                });
               }
             } catch (edgeError: any) {
               // Log edge detection error but don't crash the drag operation
