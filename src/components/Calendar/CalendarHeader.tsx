@@ -501,6 +501,8 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             {
               borderTopWidth: 1,
               borderTopColor: theme.gridLineColor,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.gridLineColor,
               borderLeftWidth: 1,
               borderLeftColor: theme.gridLineColor,
               borderRightWidth: 1,
@@ -508,18 +510,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             },
           ]}
         >
-          {/* Time label placeholder for month view too */}
-          <View
-            style={[
-              styles.timeLabelPlaceholder,
-              {
-                borderRightWidth: 1,
-                borderRightColor: theme.gridLineColor,
-              },
-            ]}
-          />
-
-          {["D", "L", "M", "M", "J", "V", "S"].map((day, index) => (
+          {["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"].map((day, index) => (
             <View
               key={index}
               style={[
@@ -528,14 +519,15 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
                   borderRightWidth: index < 6 ? 1 : 0,
                   borderRightColor: theme.gridLineColor,
                 },
+                (index === 5 || index === 6) && { backgroundColor: theme.weekendColor },
               ]}
             >
-              <Text
+              <Text       
                 style={[
                   styles.monthDayText,
                   { color: theme.textColor },
-                  (index === 0 || index === 6) && { opacity: 0.7 },
-                ]}
+                  (index === 5 || index === 6) && { opacity: 0.7 },
+                ]}  
               >
                 {day}
               </Text>
@@ -799,13 +791,14 @@ const styles = StyleSheet.create({
   monthDaysRow: {
     flexDirection: "row",
     paddingHorizontal: 0,
-    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(229, 229, 234, 0.6)",
   },
   monthDayCell: {
     flex: 1,
     alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
   monthDayText: {
     fontSize: 13,

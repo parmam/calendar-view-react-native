@@ -17,7 +17,6 @@ import {
 import * as Haptics from "expo-haptics";
 import { CalendarProvider, useCalendar } from "./CalendarContext";
 import CalendarHeader from "./CalendarHeader";
-import AllDayEvents from "./AllDayEvents";
 import TimeGrid from "./TimeGrid";
 import MonthView from "./MonthView";
 import { useLogger } from "./utils/logger";
@@ -513,7 +512,6 @@ const CalendarContent: React.FC = () => {
       case "workWeek":
         return (
           <>
-            <AllDayEvents />
             <TimeGrid
               viewType={viewType}
               panHandlers={isDragEnabled ? panResponder.panHandlers : undefined}

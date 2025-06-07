@@ -277,51 +277,7 @@ const MonthView: React.FC = () => {
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header row with weekday names */}
-      <View
-        style={[
-          styles.weekDaysRow,
-          {
-            borderBottomColor: theme.gridLineColor,
-            borderBottomWidth: 1,
-            borderLeftWidth: 1,
-            borderLeftColor: theme.gridLineColor,
-            borderRightWidth: 1,
-            borderRightColor: theme.gridLineColor,
-            borderTopWidth: 1,
-            borderTopColor: theme.gridLineColor,
-          },
-        ]}
-      >
-        {weekDays.map((day, index) => (
-          <View
-            key={index}
-            style={[
-              styles.weekDayCell,
-              index < weekDays.length - 1 && {
-                borderRightWidth: 1,
-                borderRightColor: theme.gridLineColor,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.weekDayText,
-                {
-                  color:
-                    index === 0 || index === 6
-                      ? theme.secondaryColor
-                      : theme.textColor,
-                },
-              ]}
-            >
-              {day}
-            </Text>
-          </View>
-        ))}
-      </View>
 
-      {/* Calendar grid */}
       <View
         style={[
           styles.monthGrid,
