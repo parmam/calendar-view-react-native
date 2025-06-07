@@ -10,8 +10,8 @@ import {
 } from "react-native";
 import {
   GestureHandlerRootView,
-  PinchGestureHandler,
-  PinchGestureHandlerGestureEvent,
+  Gesture,
+  GestureDetector,
   State,
 } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
@@ -118,8 +118,7 @@ const CalendarContent: React.FC = () => {
     timeInterval,
   } = useCalendar();
 
-  // Refs para los gestos
-  const pinchRef = useRef(null);
+  // Refs para los gestos (pinchRef ya no es necesario con el nuevo Gesture API)
   const dragStartTime = useRef<Date | null>(null);
   const dragCurrentTime = useRef<Date | null>(null);
 
@@ -228,25 +227,23 @@ const CalendarContent: React.FC = () => {
     [setViewType, hapticOptions, viewType]
   );
 
-  // Manejo del gesto de pinch para zoom
-  const onPinchGestureEvent = useCallback(
-    (event: PinchGestureHandlerGestureEvent) => {
+  // Manejo del gesto de pinch para zoom usando el nuevo Gesture API
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((event) => {
       // Ajusta el nivel de zoom basado en la escala del gesto
       const newZoomLevel = Math.max(
         0.5,
-        Math.min(2, zoomLevel * event.nativeEvent.scale)
+        Math.min(2, zoomLevel * event.scale)
       );
 
       logger.debug("Pinch gesture zoom", {
-        scale: event.nativeEvent.scale,
+        scale: event.scale,
         previousZoom: zoomLevel,
         newZoom: newZoomLevel,
       });
 
       setZoomLevel(newZoomLevel);
-    },
-    [zoomLevel, setZoomLevel]
-  );
+    });
 
   // Trigger haptic feedback
   const triggerHapticFeedback = useCallback(
@@ -547,9 +544,9 @@ const CalendarContent: React.FC = () => {
         onViewTypeChange={handleViewTypeChange}
       />
 
-      <PinchGestureHandler ref={pinchRef} onGestureEvent={onPinchGestureEvent}>
+      <GestureDetector gesture={pinchGesture}>
         <View style={styles.contentContainer}>{renderContent()}</View>
-      </PinchGestureHandler>
+      </GestureDetector>
 
       {/* Time change confirmation modal */}
       <TimeChangeConfirmationModal />
