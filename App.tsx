@@ -8,6 +8,7 @@ import {
   Button,
   TouchableOpacity,
   Text,
+  Alert,
 } from "react-native";
 import {
   Calendar,
@@ -25,6 +26,9 @@ import { useCalendarConfig } from "./src/components/Calendar/config/useCalendarC
 // Importaciones para FontAwesome
 import { library } from "@fortawesome/fontawesome-svg-core";
 import { faCalendarAlt } from "@fortawesome/free-solid-svg-icons";
+import * as Updates from 'expo-updates';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from 'expo-constants';
 
 // Agregar los iconos que usaremos a la biblioteca de FontAwesome
 library.add(faCalendarAlt);
@@ -598,6 +602,232 @@ const AppContent = () => {
 
 // Main App with logging provider
 export default function App() {
+  // Obtener la versión de la app dinámicamente del archivo app.json
+  // Esto asegura que siempre usemos la versión correcta sin necesidad de actualizarla manualmente
+  // La versión se usa para registro de actualizaciones y seguimiento de cambios
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
+  
+  const [updateConfig, setUpdateConfig] = useState({
+    autoUpdate: false,
+    lastUpdateCheck: null as string | null,
+    updateHistory: [] as Array<{
+      date: string;
+      version: string;
+      updateId: string;
+      success: boolean;
+    }>,
+  });
+  
+  useEffect(() => {
+    // Carga la configuración de actualizaciones guardada
+    loadUpdateConfig();
+    
+    // Verifica actualizaciones al iniciar
+    checkForUpdates();
+    
+    // Configura verificación periódica (cada 30 minutos)
+    const updateInterval = setInterval(() => {
+      checkForUpdates();
+    }, 30 * 60 * 1000);
+    
+    // Limpia el intervalo al desmontar
+    return () => clearInterval(updateInterval);
+  }, []);
+  
+  // Carga la configuración de actualizaciones desde almacenamiento
+  const loadUpdateConfig = async () => {
+    try {
+      const savedConfig = await AsyncStorage.getItem('updateConfig');
+      if (savedConfig) {
+        setUpdateConfig(JSON.parse(savedConfig));
+      }
+    } catch (error) {
+      console.log('Error loading update config:', error);
+    }
+  };
+  
+  // Guarda la configuración de actualizaciones
+  const saveUpdateConfig = async (config: typeof updateConfig) => {
+    try {
+      await AsyncStorage.setItem('updateConfig', JSON.stringify(config));
+      setUpdateConfig(config);
+    } catch (error) {
+      console.log('Error saving update config:', error);
+    }
+  };
+  
+  // Registra el historial de actualizaciones
+  const logUpdateHistory = async (updateInfo: {
+    id?: string;
+    version?: string;
+    success: boolean;
+  }) => {
+    const newHistory = [...updateConfig.updateHistory, {
+      date: new Date().toISOString(),
+      version: updateInfo.version || 'unknown',
+      updateId: updateInfo.id || 'unknown',
+      success: updateInfo.success,
+    }];
+    
+    await saveUpdateConfig({
+      ...updateConfig,
+      updateHistory: newHistory,
+      lastUpdateCheck: new Date().toISOString(),
+    });
+  };
+
+  // Verifica si hay actualizaciones disponibles
+  async function checkForUpdates() {
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      
+      if (update.isAvailable) {
+        await handleUpdateAvailable(update);
+      } else {
+        console.log('No updates available');
+        await saveUpdateConfig({
+          ...updateConfig,
+          lastUpdateCheck: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.log('Error checking for updates:', error);
+      // Intenta realizar rollback si el error es crítico
+      await attemptRollbackOnError(error as Error);
+    }
+  }
+  
+  // Maneja cuando hay una actualización disponible
+  async function handleUpdateAvailable(update: Updates.UpdateCheckResult) {
+    try {
+      // Descarga la actualización
+      await Updates.fetchUpdateAsync();
+      
+      const updateId = update.manifest?.id || 'unknown';
+      
+      // Si actualización automática está habilitada
+      if (updateConfig.autoUpdate) {
+        await logUpdateHistory({
+          id: updateId,
+          version: appVersion,
+          success: true,
+        });
+        
+        // Reinicia automáticamente
+        await Updates.reloadAsync();
+      } else {
+        // Notifica al usuario
+        Alert.alert(
+          "Actualización Disponible",
+          `Nueva actualización lista para instalar.`,
+          [
+            { 
+              text: "Después", 
+              onPress: () => logUpdateHistory({
+                id: updateId,
+                version: appVersion,
+                success: false,
+              })
+            },
+            { 
+              text: "Actualizar Ahora", 
+              onPress: async () => {
+                await logUpdateHistory({
+                  id: updateId,
+                  version: appVersion,
+                  success: true,
+                });
+                await Updates.reloadAsync();
+              }
+            },
+            {
+              text: "Actualizar Siempre",
+              onPress: async () => {
+                await saveUpdateConfig({
+                  ...updateConfig,
+                  autoUpdate: true,
+                });
+                await logUpdateHistory({
+                  id: updateId,
+                  version: appVersion,
+                  success: true,
+                });
+                await Updates.reloadAsync();
+              }
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.log('Error fetching update:', error);
+      await logUpdateHistory({
+        id: 'error',
+        version: appVersion,
+        success: false,
+      });
+    }
+  }
+  
+  // Intenta hacer rollback en caso de error crítico
+  async function attemptRollbackOnError(error: Error) {
+    // Determina si el error es lo suficientemente grave para justificar un rollback
+    const isCriticalError = error.message?.includes('critical') || 
+                          (error as any).code === 'ERR_UPDATES_MANIFEST' ||
+                          (error as any).code === 'ERR_UPDATES_FETCH';
+    
+    if (isCriticalError) {
+      try {
+        console.log('Attempting rollback due to critical error');
+        // Muestra alerta de rollback
+        Alert.alert(
+          "Problema Detectado",
+          "Se detectó un problema con la actualización. ¿Quiere volver a la versión anterior?",
+          [
+            { text: "No" },
+            { 
+              text: "Sí, Volver", 
+              onPress: async () => {
+                try {
+                  // Limpia la caché como medida de recuperación
+                  await handleCacheIssues();
+                } catch (rollbackError) {
+                  console.error('Error during recovery:', rollbackError);
+                }
+              }
+            }
+          ]
+        );
+      } catch (rollbackError) {
+        console.error('Error in recovery process:', rollbackError);
+      }
+    }
+  }
+  
+  // Maneja problemas de caché
+  async function handleCacheIssues() {
+    try {
+      // Como expo-updates no tiene clearUpdatesAsync, reiniciamos la app
+      Alert.alert(
+        "Recuperación Necesaria",
+        "La aplicación necesita reiniciarse para resolver problemas.",
+        [
+          {
+            text: "OK",
+            onPress: async () => {
+              try {
+                await Updates.reloadAsync();
+              } catch (error) {
+                console.error('Error reloading app:', error);
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error in recovery process:', error);
+    }
+  }
+
   return (
     <LoggingProvider>
       <AppContent />
