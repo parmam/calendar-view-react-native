@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,21 +9,14 @@ import {
   Animated,
   ScrollView,
   Dimensions,
-} from "react-native";
-import {
-  formatDate,
-  formatMonth,
-  formatYear,
-  getDayName,
-  getWeekDates,
-  isToday,
-} from "./utils";
-import { useCalendar } from "./CalendarContext";
-import { CalendarViewType } from "./types";
+} from 'react-native';
+import { formatDate, formatMonth, formatYear, getDayName, getWeekDates, isToday } from './utils';
+import { useCalendar } from './CalendarContext';
+import { CalendarViewType } from './types';
 
 // Ensure this matches the TIME_LABEL_WIDTH in TimeGrid.tsx
 const TIME_LABEL_WIDTH = 50;
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface CalendarHeaderProps {
   onPrevious: () => void;
@@ -38,22 +31,15 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
   onToday,
   onViewTypeChange,
 }) => {
-  const {
-    viewType,
-    selectedDate,
-    theme,
-    locale,
-    firstDayOfWeek,
-    visibleDays,
-    setSelectedDate,
-  } = useCalendar();
+  const { viewType, selectedDate, theme, locale, firstDayOfWeek, visibleDays, setSelectedDate } =
+    useCalendar();
 
   // Get the dates to display based on the view type
   const dates = useMemo(() => {
     switch (viewType) {
-      case "day":
+      case 'day':
         return [selectedDate];
-      case "3day": {
+      case '3day': {
         const result = [];
         for (let i = 0; i < 3; i++) {
           const date = new Date(selectedDate);
@@ -62,14 +48,12 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
         }
         return result;
       }
-      case "week":
-        return getWeekDates(selectedDate, firstDayOfWeek).filter((_, i) =>
-          visibleDays.includes(i)
-        );
-      case "workWeek":
+      case 'week':
+        return getWeekDates(selectedDate, firstDayOfWeek).filter((_, i) => visibleDays.includes(i));
+      case 'workWeek':
         // Mostrar solo días laborables (lunes a viernes)
         return getWeekDates(selectedDate, 1).slice(0, 5);
-      case "month":
+      case 'month':
         return getWeekDates(selectedDate, firstDayOfWeek);
       default:
         return [selectedDate];
@@ -81,10 +65,10 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
     const month = formatMonth(selectedDate, locale);
     const year = formatYear(selectedDate, locale);
     const date = formatDate(selectedDate, locale);
-    
+
     // Obtener el nombre del día en español
     const getDayOfWeek = (date: Date) => {
-      const days = locale.startsWith('es') 
+      const days = locale.startsWith('es')
         ? ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
         : ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       return days[date.getDay()];
@@ -101,17 +85,17 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
     };
 
     switch (viewType) {
-      case "month":
+      case 'month':
         // For month view, just return the month name and year
         return { primary: month, secondary: year };
-      case "day":
+      case 'day':
         return {
           primary: formatFullDate(selectedDate),
           secondary: year,
         };
-      case "3day":
-      case "week":
-      case "workWeek":
+      case '3day':
+      case 'week':
+      case 'workWeek':
         if (dates.length > 0) {
           const firstDate = dates[0];
           const lastDate = dates[dates.length - 1];
@@ -143,14 +127,11 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
                 lastDate,
                 locale
               )} ${formatMonth(lastDate, locale)}`,
-              secondary: `${formatYear(firstDate, locale)} - ${formatYear(
-                lastDate,
-                locale
-              )}`,
+              secondary: `${formatYear(firstDate, locale)} - ${formatYear(lastDate, locale)}`,
             };
           }
         }
-        return { primary: "", secondary: "" };
+        return { primary: '', secondary: '' };
       default:
         return {
           primary: formatFullDate(selectedDate),
@@ -161,19 +142,19 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
 
   // Get view type labels based on locale
   const viewTypeLabels = useMemo(() => {
-    const isSpanish = locale.startsWith("es");
+    const isSpanish = locale.startsWith('es');
     return {
-      day: isSpanish ? "Día" : "Day",
-      threeDays: isSpanish ? "3 Días" : "3 Days",
-      week: isSpanish ? "Semana" : "Week",
-      workWeek: isSpanish ? "L-V" : "M-F",
-      month: isSpanish ? "Mes" : "Month",
+      day: isSpanish ? 'Día' : 'Day',
+      threeDays: isSpanish ? '3 Días' : '3 Days',
+      week: isSpanish ? 'Semana' : 'Week',
+      workWeek: isSpanish ? 'L-V' : 'M-F',
+      month: isSpanish ? 'Mes' : 'Month',
     };
   }, [locale]);
 
   // Get localized "Today" button text
   const todayButtonText = useMemo(() => {
-    return locale.startsWith("es") ? "Hoy" : "Today";
+    return locale.startsWith('es') ? 'Hoy' : 'Today';
   }, [locale]);
 
   // Determinar si un día es fin de semana
@@ -200,14 +181,8 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
     >
       {/* Main header with period display and navigation */}
       <View style={styles.mainHeader}>
-        <TouchableOpacity
-          style={styles.navArrowLeft}
-          onPress={onPrevious}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.arrowButtonText, { color: theme.primaryColor }]}>
-            ‹
-          </Text>
+        <TouchableOpacity style={styles.navArrowLeft} onPress={onPrevious} activeOpacity={0.7}>
+          <Text style={[styles.arrowButtonText, { color: theme.primaryColor }]}>‹</Text>
         </TouchableOpacity>
 
         <View style={styles.dateContainer}>
@@ -219,14 +194,8 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.navArrowRight}
-          onPress={onNext}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.arrowButtonText, { color: theme.primaryColor }]}>
-            ›
-          </Text>
+        <TouchableOpacity style={styles.navArrowRight} onPress={onNext} activeOpacity={0.7}>
+          <Text style={[styles.arrowButtonText, { color: theme.primaryColor }]}>›</Text>
         </TouchableOpacity>
       </View>
 
@@ -251,18 +220,18 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             <TouchableOpacity
               style={[
                 styles.viewTypeButton,
-                viewType === "day" && styles.activeViewButton,
-                viewType === "day" && { backgroundColor: theme.primaryColor },
+                viewType === 'day' && styles.activeViewButton,
+                viewType === 'day' && { backgroundColor: theme.primaryColor },
               ]}
-              onPress={() => onViewTypeChange("day")}
+              onPress={() => onViewTypeChange('day')}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.viewTypeButtonText,
                   {
-                    color: viewType === "day" ? "#FFFFFF" : theme.textColor,
-                    opacity: viewType === "day" ? 1 : 0.8,
+                    color: viewType === 'day' ? '#FFFFFF' : theme.textColor,
+                    opacity: viewType === 'day' ? 1 : 0.8,
                   },
                 ]}
               >
@@ -272,18 +241,18 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             <TouchableOpacity
               style={[
                 styles.viewTypeButton,
-                viewType === "3day" && styles.activeViewButton,
-                viewType === "3day" && { backgroundColor: theme.primaryColor },
+                viewType === '3day' && styles.activeViewButton,
+                viewType === '3day' && { backgroundColor: theme.primaryColor },
               ]}
-              onPress={() => onViewTypeChange("3day")}
+              onPress={() => onViewTypeChange('3day')}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.viewTypeButtonText,
                   {
-                    color: viewType === "3day" ? "#FFFFFF" : theme.textColor,
-                    opacity: viewType === "3day" ? 1 : 0.8,
+                    color: viewType === '3day' ? '#FFFFFF' : theme.textColor,
+                    opacity: viewType === '3day' ? 1 : 0.8,
                   },
                 ]}
               >
@@ -293,20 +262,20 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             <TouchableOpacity
               style={[
                 styles.viewTypeButton,
-                viewType === "workWeek" && styles.activeViewButton,
-                viewType === "workWeek" && {
+                viewType === 'workWeek' && styles.activeViewButton,
+                viewType === 'workWeek' && {
                   backgroundColor: theme.primaryColor,
                 },
               ]}
-              onPress={() => onViewTypeChange("workWeek")}
+              onPress={() => onViewTypeChange('workWeek')}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.viewTypeButtonText,
                   {
-                    color: viewType === "workWeek" ? "#FFFFFF" : theme.textColor,
-                    opacity: viewType === "workWeek" ? 1 : 0.8,
+                    color: viewType === 'workWeek' ? '#FFFFFF' : theme.textColor,
+                    opacity: viewType === 'workWeek' ? 1 : 0.8,
                   },
                 ]}
               >
@@ -316,18 +285,18 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             <TouchableOpacity
               style={[
                 styles.viewTypeButton,
-                viewType === "week" && styles.activeViewButton,
-                viewType === "week" && { backgroundColor: theme.primaryColor },
+                viewType === 'week' && styles.activeViewButton,
+                viewType === 'week' && { backgroundColor: theme.primaryColor },
               ]}
-              onPress={() => onViewTypeChange("week")}
+              onPress={() => onViewTypeChange('week')}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.viewTypeButtonText,
                   {
-                    color: viewType === "week" ? "#FFFFFF" : theme.textColor,
-                    opacity: viewType === "week" ? 1 : 0.8,
+                    color: viewType === 'week' ? '#FFFFFF' : theme.textColor,
+                    opacity: viewType === 'week' ? 1 : 0.8,
                   },
                 ]}
               >
@@ -337,18 +306,18 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             <TouchableOpacity
               style={[
                 styles.viewTypeButton,
-                viewType === "month" && styles.activeViewButton,
-                viewType === "month" && { backgroundColor: theme.primaryColor },
+                viewType === 'month' && styles.activeViewButton,
+                viewType === 'month' && { backgroundColor: theme.primaryColor },
               ]}
-              onPress={() => onViewTypeChange("month")}
+              onPress={() => onViewTypeChange('month')}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.viewTypeButtonText,
                   {
-                    color: viewType === "month" ? "#FFFFFF" : theme.textColor,
-                    opacity: viewType === "month" ? 1 : 0.8,
+                    color: viewType === 'month' ? '#FFFFFF' : theme.textColor,
+                    opacity: viewType === 'month' ? 1 : 0.8,
                   },
                 ]}
               >
@@ -361,7 +330,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             style={[
               styles.todayButton,
               {
-                backgroundColor: "rgba(0, 122, 255, 0.1)",
+                backgroundColor: 'rgba(0, 122, 255, 0.1)',
                 borderWidth: 1,
                 borderColor: theme.primaryColor,
               },
@@ -369,9 +338,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             onPress={onToday}
             activeOpacity={0.7}
           >
-            <Text
-              style={[styles.todayButtonText, { color: theme.primaryColor }]}
-            >
+            <Text style={[styles.todayButtonText, { color: theme.primaryColor }]}>
               {todayButtonText}
             </Text>
           </TouchableOpacity>
@@ -379,9 +346,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
       </ScrollView>
 
       {/* Weekday headers for week/3-day/workWeek view */}
-      {(viewType === "3day" ||
-        viewType === "week" ||
-        viewType === "workWeek") && (
+      {(viewType === '3day' || viewType === 'week' || viewType === 'workWeek') && (
         <View
           style={[
             styles.daysContainer,
@@ -430,7 +395,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
                   },
                 ]}
                 onPress={() => {
-                  onViewTypeChange("day");
+                  onViewTypeChange('day');
                   setSelectedDate(date);
                 }}
               >
@@ -438,7 +403,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
                   style={[
                     styles.dayName,
                     { color: theme.textColor },
-                    isCurrentDay && { fontWeight: "700" },
+                    isCurrentDay && { fontWeight: '700' },
                     isWeekendDay && { opacity: 0.7 },
                   ]}
                 >
@@ -450,7 +415,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
                     { color: theme.textColor },
                     isCurrentDay && {
                       color: theme.todayIndicatorColor,
-                      fontWeight: "700",
+                      fontWeight: '700',
                     },
                     isWeekendDay && { opacity: 0.7 },
                   ]}
@@ -464,7 +429,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
       )}
 
       {/* Weekday headers for month view */}
-      {viewType === "month" && (
+      {viewType === 'month' && (
         <View
           style={[
             styles.monthDaysRow,
@@ -480,7 +445,7 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
             },
           ]}
         >
-          {["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"].map((day, index) => (
+          {['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'].map((day, index) => (
             <View
               key={index}
               style={[
@@ -492,12 +457,12 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
                 (index === 5 || index === 6) && { backgroundColor: theme.weekendColor },
               ]}
             >
-              <Text       
+              <Text
                 style={[
                   styles.monthDayText,
                   { color: theme.textColor },
                   (index === 5 || index === 6) && { opacity: 0.7 },
-                ]}  
+                ]}
               >
                 {day}
               </Text>
@@ -505,100 +470,98 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
           ))}
         </View>
       )}
-
-
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: Platform.OS === "ios" ? 40 : StatusBar.currentHeight,
+    paddingTop: Platform.OS === 'ios' ? 40 : StatusBar.currentHeight,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(229, 229, 234, 0.4)",
+    borderBottomColor: 'rgba(229, 229, 234, 0.4)',
   },
   mainHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
   dateContainer: {
-    alignItems: "center",
+    alignItems: 'center',
     flex: 1,
   },
   primaryTitle: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
     marginBottom: 2,
-    textAlign: "center",
+    textAlign: 'center',
   },
   yearText: {
     fontSize: 28,
-    fontWeight: "700",
+    fontWeight: '700',
     letterSpacing: 1,
   },
   navigationContainer: {
     flex: 1,
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   todayButton: {
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 16,
     marginLeft: 8,
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
   },
   todayButtonText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   navArrowLeft: {
     width: 40,
     height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: 20,
   },
   navArrowRight: {
     width: 40,
     height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: 20,
   },
   arrowButtonText: {
     fontSize: 32,
-    fontWeight: "300",
+    fontWeight: '300',
   },
   viewTypeScrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   viewTypeRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   viewTypeSegment: {
-    flexDirection: "row",
+    flexDirection: 'row',
     borderRadius: 10,
-    overflow: "hidden",
+    overflow: 'hidden',
     padding: 4,
   },
   viewTypeButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    alignItems: "center",
+    alignItems: 'center',
     borderRadius: 8,
     marginRight: 2,
   },
   activeViewButton: {
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
@@ -606,51 +569,50 @@ const styles = StyleSheet.create({
   },
   viewTypeButtonText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   daysContainer: {
-    flexDirection: "row",
+    flexDirection: 'row',
     paddingHorizontal: 0,
     paddingVertical: 8,
   },
   timeLabelPlaceholder: {
     width: TIME_LABEL_WIDTH,
-    height: "100%",
+    height: '100%',
   },
   dayCell: {
     flex: 1,
-    alignItems: "center",
+    alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 4,
   },
   dayName: {
     fontSize: 13,
-    fontWeight: "600",
-    textTransform: "uppercase",
+    fontWeight: '600',
+    textTransform: 'uppercase',
     marginBottom: 4,
   },
   dayNumber: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   monthDaysRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     paddingHorizontal: 0,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(229, 229, 234, 0.6)",
+    borderBottomColor: 'rgba(229, 229, 234, 0.6)',
   },
   monthDayCell: {
     flex: 1,
-    alignItems: "center",
+    alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 4,
   },
   monthDayText: {
     fontSize: 13,
-    fontWeight: "600",
-    textTransform: "uppercase",
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
-
 });
 
 export default CalendarHeader;

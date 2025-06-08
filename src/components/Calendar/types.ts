@@ -17,17 +17,17 @@ export type CalendarEvent = {
 };
 
 export type RecurrenceRule = {
-  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
   interval?: number;
   count?: number;
   until?: Date;
-  byDay?: Array<"MO" | "TU" | "WE" | "TH" | "FR" | "SA" | "SU">;
+  byDay?: Array<'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA' | 'SU'>;
   byMonthDay?: number[];
   byMonth?: number[];
   exceptions?: Date[];
 };
 
-export type CalendarViewType = "day" | "3day" | "week" | "workWeek" | "month";
+export type CalendarViewType = 'day' | '3day' | 'week' | 'workWeek' | 'month';
 
 export type CalendarTheme = {
   backgroundColor: string;
@@ -65,10 +65,10 @@ export type UnavailableHours = {
 
 export type HapticOptions = {
   enabled: boolean;
-  eventCreate?: "light" | "medium" | "heavy";
-  eventMove?: "light" | "medium" | "heavy";
-  viewChange?: "light" | "medium" | "heavy";
-  error?: "light" | "medium" | "heavy";
+  eventCreate?: 'light' | 'medium' | 'heavy';
+  eventMove?: 'light' | 'medium' | 'heavy';
+  viewChange?: 'light' | 'medium' | 'heavy';
+  error?: 'light' | 'medium' | 'heavy';
 };
 
 export type DragPreviewConfig = {
@@ -131,11 +131,7 @@ export type CalendarContextType = {
   setSelectedDate: (date: Date) => void;
   setZoomLevel: (level: number) => void;
   setIsDragEnabled: (enabled: boolean) => void;
-  showTimeChangeConfirmation: (
-    event: CalendarEvent,
-    newStart: Date,
-    newEnd: Date
-  ) => void;
+  showTimeChangeConfirmation: (event: CalendarEvent, newStart: Date, newEnd: Date) => void;
   hideTimeChangeConfirmation: () => void;
   confirmTimeChange: () => void;
 };

@@ -1,13 +1,6 @@
-import React, { useMemo, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Dimensions,
-} from "react-native";
-import { useCalendar } from "./CalendarContext";
+import React, { useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { useCalendar } from './CalendarContext';
 import {
   getMonthDates,
   isSameDay,
@@ -15,16 +8,16 @@ import {
   formatDate,
   getDayName,
   matchesRecurrenceRule,
-} from "./utils";
-import { useScrollHandler } from "./utils/ScrollHandler";
-import { useLogger } from "./utils/logger";
-import { CalendarEvent } from "./types";
+} from './utils';
+import { useScrollHandler } from './utils/ScrollHandler';
+import { useLogger } from './utils/logger';
+import { CalendarEvent } from './types';
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const MonthView: React.FC = () => {
   // Initialize logger
-  const logger = useLogger("MonthView");
+  const logger = useLogger('MonthView');
 
   // Initialize scroll handler
   const { scrollProps } = useScrollHandler();
@@ -49,38 +42,26 @@ const MonthView: React.FC = () => {
 
   // Process all events including recurring events
   const processedEvents = useMemo(() => {
-    logger.debug("Processing events for month view", {
+    logger.debug('Processing events for month view', {
       month: selectedDate.getMonth() + 1,
       year: selectedDate.getFullYear(),
       eventCount: events.length,
     });
 
     // Procesar todos los eventos, incluidos los recurrentes
-    let allEvents: CalendarEvent[] = [];
+    const allEvents: CalendarEvent[] = [];
 
-    events.forEach((event) => {
+    events.forEach(event => {
       // Añadir el evento original
       allEvents.push(event);
 
       // Procesar eventos recurrentes
       if (event.recurrence) {
-        const startMonth = new Date(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth(),
-          1
-        );
-        const endMonth = new Date(
-          selectedDate.getFullYear(),
-          selectedDate.getMonth() + 1,
-          0
-        );
+        const startMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        const endMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
 
         // Para cada día del mes
-        for (
-          let day = new Date(startMonth);
-          day <= endMonth;
-          day.setDate(day.getDate() + 1)
-        ) {
+        for (let day = new Date(startMonth); day <= endMonth; day.setDate(day.getDate() + 1)) {
           // Verificar si el día coincide con la regla de recurrencia
           if (matchesRecurrenceRule(day, event.start, event.recurrence)) {
             // No incluir el evento original
@@ -100,14 +81,14 @@ const MonthView: React.FC = () => {
               // Excluir fechas de excepción
               if (
                 event.recurrence.exceptions &&
-                event.recurrence.exceptions.some((exc) => isSameDay(exc, day))
+                event.recurrence.exceptions.some(exc => isSameDay(exc, day))
               ) {
                 continue;
               }
 
               const recurrenceEvent: CalendarEvent = {
                 ...event,
-                id: `${event.id}-recurrence-${day.toISOString().split("T")[0]}`,
+                id: `${event.id}-recurrence-${day.toISOString().split('T')[0]}`,
                 start: recurrenceStart,
                 end: recurrenceEnd,
                 isRecurrence: true,
@@ -120,7 +101,7 @@ const MonthView: React.FC = () => {
       }
     });
 
-    logger.debug("Processed events", {
+    logger.debug('Processed events', {
       total: allEvents.length,
       recurring: allEvents.length - events.length,
     });
@@ -132,11 +113,11 @@ const MonthView: React.FC = () => {
   const eventsByDate = useMemo(() => {
     const result: Record<string, CalendarEvent[]> = {};
 
-    dates.forEach((date) => {
-      const dateStr = date.toISOString().split("T")[0];
+    dates.forEach(date => {
+      const dateStr = date.toISOString().split('T')[0];
 
       // Filtrar eventos para esta fecha
-      const dayEvents = processedEvents.filter((event) => {
+      const dayEvents = processedEvents.filter(event => {
         const eventDate = new Date(event.start);
         return (
           eventDate.getFullYear() === date.getFullYear() &&
@@ -165,19 +146,19 @@ const MonthView: React.FC = () => {
   // Handle day press
   const handleDayPress = useCallback(
     (date: Date) => {
-      logger.debug("Day pressed", { date });
+      logger.debug('Day pressed', { date });
 
       setSelectedDate(date);
 
       // Si está en vista mensual y el usuario presiona un día
       // podemos cambiar a vista de día para ese día específico
-      if (viewType === "month") {
-        logger.debug("Switching to day view");
-        setViewType("day");
+      if (viewType === 'month') {
+        logger.debug('Switching to day view');
+        setViewType('day');
       }
 
       // Si hay eventos ese día, no crear evento automáticamente
-      const dateStr = date.toISOString().split("T")[0];
+      const dateStr = date.toISOString().split('T')[0];
       const hasEvents = (eventsByDate[dateStr] || []).length > 0;
 
       // Si no hay eventos para este día y existe el callback, dispararlo
@@ -186,7 +167,7 @@ const MonthView: React.FC = () => {
         start.setHours(9, 0, 0);
         const end = new Date(date);
         end.setHours(10, 0, 0);
-        logger.debug("Creating event for empty day", { start, end });
+        logger.debug('Creating event for empty day', { start, end });
         onTimeSlotPress(start, end);
       }
     },
@@ -196,7 +177,7 @@ const MonthView: React.FC = () => {
   // Handles when an event block is pressed
   const handleEventPress = useCallback(
     (event: CalendarEvent) => {
-      logger.debug("Event pressed", { eventId: event.id, title: event.title });
+      logger.debug('Event pressed', { eventId: event.id, title: event.title });
 
       if (onEventPress) {
         onEventPress(event);
@@ -207,9 +188,9 @@ const MonthView: React.FC = () => {
 
         // Si el evento no es de todo el día y estamos en vista mensual,
         // podemos cambiar a vista diaria para mostrar el evento con detalle
-        if (!event.isAllDay && viewType === "month") {
-          logger.debug("Switching to day view to show event details");
-          setViewType("day");
+        if (!event.isAllDay && viewType === 'month') {
+          logger.debug('Switching to day view to show event details');
+          setViewType('day');
         }
       }
     },
@@ -277,7 +258,6 @@ const MonthView: React.FC = () => {
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
-
       <View
         style={[
           styles.monthGrid,
@@ -302,9 +282,9 @@ const MonthView: React.FC = () => {
             ]}
           >
             {week.map((date, dayIndex) => {
-              const dateStr = date.toISOString().split("T")[0];
+              const dateStr = date.toISOString().split('T')[0];
               const dayEvents = eventsByDate[dateStr] || [];
-              const isToday_ = isToday(date);
+              const isCurrentDay = isToday(date);
               const inCurrentMonth = isCurrentMonth(date);
               const isWeekendDay = isWeekend(date);
 
@@ -317,15 +297,12 @@ const MonthView: React.FC = () => {
                       borderRightColor: theme.gridLineColor,
                       borderRightWidth: 1,
                     },
-                    isToday_ && {
+                    isCurrentDay && {
                       backgroundColor: theme.selectedDayColor,
                       borderColor: theme.todayIndicatorColor,
                       borderWidth: 1,
                     },
-                    !inCurrentMonth && [
-                      styles.otherMonthDay,
-                      { borderColor: theme.gridLineColor },
-                    ],
+                    !inCurrentMonth && [styles.otherMonthDay, { borderColor: theme.gridLineColor }],
                     isWeekendDay && { backgroundColor: theme.weekendColor },
                   ]}
                   onPress={() => handleDayPress(date)}
@@ -335,12 +312,12 @@ const MonthView: React.FC = () => {
                     style={[
                       styles.dayNumber,
                       { color: theme.textColor },
-                      isToday_ && {
+                      isCurrentDay && {
                         color: theme.todayIndicatorColor,
-                        fontWeight: "bold",
+                        fontWeight: 'bold',
                       },
                       !inCurrentMonth && styles.otherMonthDayText,
-                      isWeekendDay && { fontWeight: "500" },
+                      isWeekendDay && { fontWeight: '500' },
                     ]}
                   >
                     {formatDate(date, locale)}
@@ -366,10 +343,7 @@ const MonthView: React.FC = () => {
                           onPress={() => handleEventPress(event)}
                         >
                           <Text
-                            style={[
-                              styles.eventText,
-                              { color: theme.eventTextColor },
-                            ]}
+                            style={[styles.eventText, { color: theme.eventTextColor }]}
                             numberOfLines={1}
                             ellipsizeMode="tail"
                           >
@@ -382,12 +356,7 @@ const MonthView: React.FC = () => {
                     {/* "More" indicator if there are more events */}
                     {dayEvents.length > 4 && (
                       <View style={styles.moreEventsIndicator}>
-                        <Text
-                          style={[
-                            styles.moreEventsText,
-                            { color: theme.secondaryColor },
-                          ]}
-                        >
+                        <Text style={[styles.moreEventsText, { color: theme.secondaryColor }]}>
                           +{dayEvents.length - 4}
                         </Text>
                       </View>
@@ -406,27 +375,27 @@ const MonthView: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: '#FFFFFF',
   },
   weekDaysRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     borderBottomWidth: 1,
     paddingVertical: 10,
   },
   weekDayCell: {
     flex: 1,
-    alignItems: "center",
+    alignItems: 'center',
   },
   weekDayText: {
     fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   monthGrid: {
     flex: 1,
   },
   weekRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     borderBottomWidth: 1,
   },
   dayCell: {
@@ -436,7 +405,7 @@ const styles = StyleSheet.create({
   },
   dayNumber: {
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: '500',
     marginBottom: 4,
   },
   eventContainer: {
@@ -450,21 +419,21 @@ const styles = StyleSheet.create({
   },
   eventText: {
     fontSize: 10,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   moreEventsIndicator: {
-    alignItems: "center",
+    alignItems: 'center',
     marginTop: 2,
   },
   moreEventsText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   otherMonthDay: {
-    backgroundColor: "#F7F7F7",
+    backgroundColor: '#F7F7F7',
   },
   otherMonthDayText: {
-    color: "#BBBBBB",
+    color: '#BBBBBB',
   },
 });
 

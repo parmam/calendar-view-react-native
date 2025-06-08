@@ -1,15 +1,15 @@
-import React, { useEffect } from "react";
-import { Modal, View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { useCalendar } from "./CalendarContext";
-import { formatTime } from "./utils";
-import { useLogger } from "./utils/logger";
+import React, { useEffect } from 'react';
+import { Modal, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useCalendar } from './CalendarContext';
+import { formatTime } from './utils';
+import { useLogger } from './utils/logger';
 
 // Helper function to format dates in a human-readable way
 const formatDate = (date: Date, locale: string): string => {
   const options: Intl.DateTimeFormatOptions = {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
   };
   return date.toLocaleDateString(locale, options);
 };
@@ -25,7 +25,7 @@ const isSameDay = (date1: Date, date2: Date): boolean => {
 
 const TimeChangeConfirmationModal: React.FC = () => {
   // Add logger
-  const logger = useLogger("TimeChangeConfirmationModal");
+  const logger = useLogger('TimeChangeConfirmationModal');
 
   const {
     timeChangeConfirmation,
@@ -41,7 +41,7 @@ const TimeChangeConfirmationModal: React.FC = () => {
   // Add logging when modal appears
   useEffect(() => {
     if (visible && event && newStart && newEnd) {
-      logger.debug("Time change confirmation shown", {
+      logger.debug('Time change confirmation shown', {
         eventId: event.id,
         eventTitle: event.title,
         oldStart: event.start.toLocaleTimeString(),
@@ -59,13 +59,13 @@ const TimeChangeConfirmationModal: React.FC = () => {
   // Handle confirming time change with error catching
   const handleConfirmTimeChange = () => {
     try {
-      logger.debug("Confirming time change", {
+      logger.debug('Confirming time change', {
         eventId: event?.id,
         viewType,
       });
       confirmTimeChange();
     } catch (error: any) {
-      logger.error("❌ Error confirming time change", {
+      logger.error('❌ Error confirming time change', {
         error: error.message,
         eventId: event?.id,
         viewType,
@@ -78,13 +78,13 @@ const TimeChangeConfirmationModal: React.FC = () => {
   // Handle canceling time change with error catching
   const handleCancelTimeChange = () => {
     try {
-      logger.debug("Canceling time change", {
+      logger.debug('Canceling time change', {
         eventId: event?.id,
         viewType,
       });
       hideTimeChangeConfirmation();
     } catch (error: any) {
-      logger.error("❌ Error canceling time change", {
+      logger.error('❌ Error canceling time change', {
         error: error.message,
         eventId: event?.id,
         viewType,
@@ -116,8 +116,8 @@ const TimeChangeConfirmationModal: React.FC = () => {
 
   // Set appropriate modal title based on what changed
   const modalTitle = dayChanged
-    ? "Confirmar cambio de día y horario"
-    : "Confirmar cambio de horario";
+    ? 'Confirmar cambio de día y horario'
+    : 'Confirmar cambio de horario';
 
   return (
     <Modal
@@ -127,37 +127,22 @@ const TimeChangeConfirmationModal: React.FC = () => {
       onRequestClose={handleCancelTimeChange}
     >
       <View style={styles.centeredView}>
-        <View
-          style={[styles.modalView, { backgroundColor: theme.backgroundColor }]}
-        >
-          <Text style={[styles.title, { color: theme.textColor }]}>
-            {modalTitle}
-          </Text>
+        <View style={[styles.modalView, { backgroundColor: theme.backgroundColor }]}>
+          <Text style={[styles.title, { color: theme.textColor }]}>{modalTitle}</Text>
 
           <View style={styles.eventInfo}>
-            <Text style={[styles.eventTitle, { color: theme.textColor }]}>
-              {event.title}
-            </Text>
+            <Text style={[styles.eventTitle, { color: theme.textColor }]}>{event.title}</Text>
 
             {dayChanged && (
               <>
                 <View style={styles.timeRow}>
-                  <Text style={[styles.timeLabel, { color: theme.textColor }]}>
-                    Día actual:
-                  </Text>
-                  <Text style={[styles.timeValue, { color: theme.textColor }]}>
-                    {oldDate}
-                  </Text>
+                  <Text style={[styles.timeLabel, { color: theme.textColor }]}>Día actual:</Text>
+                  <Text style={[styles.timeValue, { color: theme.textColor }]}>{oldDate}</Text>
                 </View>
                 <View style={styles.timeRow}>
-                  <Text style={[styles.timeLabel, { color: theme.textColor }]}>
-                    Nuevo día:
-                  </Text>
+                  <Text style={[styles.timeLabel, { color: theme.textColor }]}>Nuevo día:</Text>
                   <Text
-                    style={[
-                      styles.timeValue,
-                      { color: theme.primaryColor, fontWeight: "bold" },
-                    ]}
+                    style={[styles.timeValue, { color: theme.primaryColor, fontWeight: 'bold' }]}
                   >
                     {newDate}
                   </Text>
@@ -166,24 +151,15 @@ const TimeChangeConfirmationModal: React.FC = () => {
             )}
 
             <View style={styles.timeRow}>
-              <Text style={[styles.timeLabel, { color: theme.textColor }]}>
-                Hora actual:
-              </Text>
+              <Text style={[styles.timeLabel, { color: theme.textColor }]}>Hora actual:</Text>
               <Text style={[styles.timeValue, { color: theme.textColor }]}>
                 {oldStartTime} - {oldEndTime}
               </Text>
             </View>
 
             <View style={styles.timeRow}>
-              <Text style={[styles.timeLabel, { color: theme.textColor }]}>
-                Nueva hora:
-              </Text>
-              <Text
-                style={[
-                  styles.timeValue,
-                  { color: theme.primaryColor, fontWeight: "bold" },
-                ]}
-              >
+              <Text style={[styles.timeLabel, { color: theme.textColor }]}>Nueva hora:</Text>
+              <Text style={[styles.timeValue, { color: theme.primaryColor, fontWeight: 'bold' }]}>
                 {newStartTime} - {newEndTime}
               </Text>
             </View>
@@ -191,22 +167,14 @@ const TimeChangeConfirmationModal: React.FC = () => {
 
           <View style={styles.buttonsContainer}>
             <TouchableOpacity
-              style={[
-                styles.button,
-                styles.cancelButton,
-                { backgroundColor: theme.errorColor },
-              ]}
+              style={[styles.button, styles.cancelButton, { backgroundColor: theme.errorColor }]}
               onPress={handleCancelTimeChange}
             >
               <Text style={styles.buttonText}>Cancelar</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[
-                styles.button,
-                styles.confirmButton,
-                { backgroundColor: theme.successColor },
-              ]}
+              style={[styles.button, styles.confirmButton, { backgroundColor: theme.successColor }]}
               onPress={handleConfirmTimeChange}
             >
               <Text style={styles.buttonText}>Confirmar</Text>
@@ -221,16 +189,16 @@ const TimeChangeConfirmationModal: React.FC = () => {
 const styles = StyleSheet.create({
   centeredView: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalView: {
-    width: "80%",
+    width: '80%',
     maxWidth: 400,
     borderRadius: 10,
     padding: 20,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -238,22 +206,22 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginBottom: 15,
-    textAlign: "center",
+    textAlign: 'center',
   },
   eventInfo: {
     marginBottom: 20,
   },
   eventTitle: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginBottom: 10,
-    textAlign: "center",
+    textAlign: 'center',
   },
   timeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
   timeLabel: {
@@ -263,14 +231,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   buttonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   button: {
     borderRadius: 5,
     padding: 10,
     elevation: 2,
-    minWidth: "40%",
+    minWidth: '40%',
   },
   cancelButton: {
     marginRight: 10,
@@ -279,9 +247,9 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   buttonText: {
-    color: "white",
-    fontWeight: "bold",
-    textAlign: "center",
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
 

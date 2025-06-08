@@ -44,12 +44,11 @@
  *    }
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { PERFORMANCE_CONFIG } from "../config/calendarConfig";
-import { Platform } from "react-native";
+import { useState, useCallback, useEffect } from 'react';
+import { PERFORMANCE_CONFIG } from '../config/calendarConfig';
 
 // Log levels
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 // Configuration for the logger
 export interface LoggerConfig {
@@ -58,45 +57,26 @@ export interface LoggerConfig {
   prefix?: string;
 }
 
-// Default configuration
-const DEFAULT_CONFIG: LoggerConfig = {
-  enabled: PERFORMANCE_CONFIG.LOGGING_ENABLED, // Use the configuration from PERFORMANCE_CONFIG
-  minLevel: PERFORMANCE_CONFIG.LOGGING_LEVEL as LogLevel, // Use the log level from PERFORMANCE_CONFIG
-  prefix: "[Calendar]",
+// Configuración inicial por defecto - reducir verbosidad
+const initialConfig: LoggerConfig = {
+  enabled: process.env.NODE_ENV === 'development',
+  minLevel: process.env.NODE_ENV === 'development' ? 'warn' : 'error',
+  prefix: '[Calendar]',
 };
 
 // Global logger state
-let globalEnabled = DEFAULT_CONFIG.enabled;
-
-// Debug levels
-const LOG_LEVELS = {
-  DEBUG: 0,
-  INFO: 1,
-  WARN: 2,
-  ERROR: 3,
-};
-
-// Current log level - set to DEBUG for debugging auto-scrolling
-const CURRENT_LOG_LEVEL = LOG_LEVELS.DEBUG;
-
-// Enable specific component logging
-const ENABLED_COMPONENTS: Record<string, boolean> = {
-  TimeGrid: true,
-  Event: true,
-  Calendar: true,
-  // Add any other components as needed
-};
+let globalEnabled = initialConfig.enabled;
 
 // Format timestamp
 const getTimestamp = () => {
   const now = new Date();
-  return `${now.getHours().toString().padStart(2, "0")}:${now
+  return `${now.getHours().toString().padStart(2, '0')}:${now
     .getMinutes()
     .toString()
-    .padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}.${now
+    .padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now
     .getMilliseconds()
     .toString()
-    .padStart(3, "0")}`;
+    .padStart(3, '0')}`;
 };
 
 // Logger utility class
@@ -104,7 +84,12 @@ class Logger {
   private config: LoggerConfig;
 
   constructor(config: Partial<LoggerConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...initialConfig, ...config };
+
+    // Desactivar logs verbosos en producción por defecto
+    if (process.env.NODE_ENV === 'production') {
+      this.config.minLevel = 'error';
+    }
   }
 
   // Configure the logger
@@ -134,60 +119,65 @@ class Logger {
 
   // Log methods
   debug(message: string, ...args: any[]): void {
-    this.log("debug", message, ...args);
+    this.log('debug', message, ...args);
   }
 
   info(message: string, ...args: any[]): void {
-    this.log("info", message, ...args);
+    this.log('info', message, ...args);
   }
 
   warn(message: string, ...args: any[]): void {
-    this.log("warn", message, ...args);
+    this.log('warn', message, ...args);
   }
 
   error(message: string, ...args: any[]): void {
-    this.log("error", message, ...args);
+    this.log('error', message, ...args);
   }
 
   // Internal log method
   private log(level: LogLevel, message: string, ...args: any[]): void {
-    if (!this.isEnabled()) return;
+    // Skip logging if disabled or below minimum level
+    if (!this.config.enabled) return;
 
-    const levels: Record<LogLevel, number> = {
+    const levelPriority = {
       debug: 0,
       info: 1,
       warn: 2,
       error: 3,
     };
 
-    if (levels[level] < levels[this.config.minLevel]) return;
+    if (levelPriority[level] < levelPriority[this.config.minLevel]) {
+      return;
+    }
 
-    const prefix = this.config.prefix ? `${this.config.prefix} ` : "";
-    const formattedMessage = `${prefix}[${level.toUpperCase()}] ${message}`;
+    // Skip expensive operations for debug logs when dragging
+    if (level === 'debug' && message.includes('drag')) {
+      if (Math.random() > 0.05) return; // Solo mostrar 5% de logs de arrastre
+    }
 
-    try {
-      switch (level) {
-        case "debug":
-          console.debug(formattedMessage, ...args);
-          break;
-        case "info":
-          console.info(formattedMessage, ...args);
-          break;
-        case "warn":
-          console.warn(formattedMessage, ...args);
-          break;
-        case "error":
-          console.error(formattedMessage, ...args);
-          break;
-      }
-    } catch (e) {
-      // Silent fail on logging errors
+    // Simple console output with minimal processing
+    const prefix = this.config.prefix ? `${this.config.prefix} ` : '';
+    const timestamp = getTimestamp();
+
+    switch (level) {
+      case 'debug':
+        console.debug(`${timestamp} ${prefix}${message}`, ...args);
+        break;
+      case 'info':
+        console.info(`${timestamp} ${prefix}${message}`, ...args);
+        break;
+      case 'warn':
+        console.warn(`${timestamp} ${prefix}${message}`, ...args);
+        break;
+      case 'error':
+        console.error(`${timestamp} ${prefix}${message}`, ...args);
+        break;
     }
   }
 }
 
 // Create a singleton instance
-export const logger = new Logger();
+const globalLogger = new Logger();
 
 /**
  * Actualiza la configuración del logger basada en los cambios de PERFORMANCE_CONFIG
@@ -197,7 +187,7 @@ export const logger = new Logger();
  * se reflejen en el comportamiento del logger.
  */
 export const updateLoggerFromConfig = () => {
-  logger.configure({
+  globalLogger.configure({
     enabled: PERFORMANCE_CONFIG.LOGGING_ENABLED,
     minLevel: PERFORMANCE_CONFIG.LOGGING_LEVEL as LogLevel,
   });
@@ -205,37 +195,22 @@ export const updateLoggerFromConfig = () => {
 
 // React hook for using the logger in components
 export const useLogger = (componentName: string) => {
-  const isEnabled = ENABLED_COMPONENTS[componentName] !== false;
-
-  const formatMessage = (level: string, message: string, data?: any) => {
-    const timestamp = getTimestamp();
-    const dataString = data ? ` ${JSON.stringify(data, null, 2)}` : "";
-    return `[${timestamp}] [${level}] [${componentName}] ${message}${dataString}`;
+  const formatMessage = (level: string, message: string) => {
+    return `[${componentName}] ${message}`;
   };
 
   return {
     debug: (message: string, data?: any) => {
-      if (isEnabled && CURRENT_LOG_LEVEL <= LOG_LEVELS.DEBUG) {
-        console.log(formatMessage("DEBUG", message, data));
-      }
+      globalLogger.debug(formatMessage('debug', message), data);
     },
-
     info: (message: string, data?: any) => {
-      if (isEnabled && CURRENT_LOG_LEVEL <= LOG_LEVELS.INFO) {
-        console.info(formatMessage("INFO", message, data));
-      }
+      globalLogger.info(formatMessage('info', message), data);
     },
-
     warn: (message: string, data?: any) => {
-      if (isEnabled && CURRENT_LOG_LEVEL <= LOG_LEVELS.WARN) {
-        console.warn(formatMessage("WARN", message, data));
-      }
+      globalLogger.warn(formatMessage('warn', message), data);
     },
-
     error: (message: string, data?: any) => {
-      if (isEnabled && CURRENT_LOG_LEVEL <= LOG_LEVELS.ERROR) {
-        console.error(formatMessage("ERROR", message, data));
-      }
+      globalLogger.error(formatMessage('error', message), data);
     },
   };
 };
@@ -251,17 +226,17 @@ export const useLoggingControl = () => {
   }, []);
 
   const enableLogging = useCallback(() => {
-    logger.enable();
+    globalLogger.enable();
     setLoggingEnabled(true);
   }, []);
 
   const disableLogging = useCallback(() => {
-    logger.disable();
+    globalLogger.disable();
     setLoggingEnabled(false);
   }, []);
 
   const configureLogging = useCallback((config: Partial<LoggerConfig>) => {
-    logger.configure(config);
+    globalLogger.configure(config);
     if (config.enabled !== undefined) {
       setLoggingEnabled(config.enabled);
     }
@@ -275,4 +250,4 @@ export const useLoggingControl = () => {
   };
 };
 
-export default logger;
+export default globalLogger;

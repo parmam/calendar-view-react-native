@@ -17,7 +17,7 @@ import {
   OVERLAP_CONFIG,
   DEFAULT_UNAVAILABLE_HOURS,
   PERFORMANCE_CONFIG,
-} from "./calendarConfig";
+} from './calendarConfig';
 
 import {
   CalendarTheme,
@@ -27,9 +27,9 @@ import {
   UnavailableHours,
   DragPreviewConfig,
   CalendarViewType,
-} from "../types";
+} from '../types';
 
-import { updateLoggerFromConfig } from "../utils/logger";
+import { updateLoggerFromConfig } from '../utils/logger';
 
 /**
  * Clase para administrar la configuración del calendario
@@ -37,14 +37,23 @@ import { updateLoggerFromConfig } from "../utils/logger";
 class CalendarConfigManager {
   // Propiedades privadas para almacenar configuraciones
   private theme: CalendarTheme;
+
   private timeRange: TimeRange;
+
   private hapticOptions: HapticOptions;
+
   private calendarConfig: CalendarConfig;
+
   private layoutConfig: typeof LAYOUT_CONFIG;
+
   private animationConfig: typeof ANIMATION_CONFIG;
+
   private overlapConfig: typeof OVERLAP_CONFIG;
+
   private unavailableHours: UnavailableHours | null;
+
   private performanceConfig: typeof PERFORMANCE_CONFIG;
+
   private calendarState: typeof INITIAL_CALENDAR_STATE;
 
   // Lista de suscriptores para notificar cambios
@@ -65,9 +74,7 @@ class CalendarConfigManager {
     this.layoutConfig = { ...LAYOUT_CONFIG };
     this.animationConfig = { ...ANIMATION_CONFIG };
     this.overlapConfig = { ...OVERLAP_CONFIG };
-    this.unavailableHours = DEFAULT_UNAVAILABLE_HOURS
-      ? { ...DEFAULT_UNAVAILABLE_HOURS }
-      : null;
+    this.unavailableHours = DEFAULT_UNAVAILABLE_HOURS ? { ...DEFAULT_UNAVAILABLE_HOURS } : null;
     this.performanceConfig = { ...PERFORMANCE_CONFIG };
     this.calendarState = { ...INITIAL_CALENDAR_STATE };
   }
@@ -266,9 +273,7 @@ class CalendarConfigManager {
     this.layoutConfig = { ...LAYOUT_CONFIG };
     this.animationConfig = { ...ANIMATION_CONFIG };
     this.overlapConfig = { ...OVERLAP_CONFIG };
-    this.unavailableHours = DEFAULT_UNAVAILABLE_HOURS
-      ? { ...DEFAULT_UNAVAILABLE_HOURS }
-      : null;
+    this.unavailableHours = DEFAULT_UNAVAILABLE_HOURS ? { ...DEFAULT_UNAVAILABLE_HOURS } : null;
     this.performanceConfig = { ...PERFORMANCE_CONFIG };
     this.calendarState = { ...INITIAL_CALENDAR_STATE };
 
@@ -314,8 +319,7 @@ class CalendarConfigManager {
 
       // Actualizar las configuraciones si existen en el JSON
       if (config.theme) this.theme = { ...this.theme, ...config.theme };
-      if (config.timeRange)
-        this.timeRange = { ...this.timeRange, ...config.timeRange };
+      if (config.timeRange) this.timeRange = { ...this.timeRange, ...config.timeRange };
       if (config.hapticOptions)
         this.hapticOptions = { ...this.hapticOptions, ...config.hapticOptions };
       if (config.calendarConfig) {
@@ -330,8 +334,7 @@ class CalendarConfigManager {
           ...config.calendarConfig,
         };
       }
-      if (config.layoutConfig)
-        this.layoutConfig = { ...this.layoutConfig, ...config.layoutConfig };
+      if (config.layoutConfig) this.layoutConfig = { ...this.layoutConfig, ...config.layoutConfig };
       if (config.animationConfig)
         this.animationConfig = {
           ...this.animationConfig,
@@ -339,8 +342,7 @@ class CalendarConfigManager {
         };
       if (config.overlapConfig)
         this.overlapConfig = { ...this.overlapConfig, ...config.overlapConfig };
-      if (config.unavailableHours)
-        this.unavailableHours = { ...config.unavailableHours };
+      if (config.unavailableHours) this.unavailableHours = { ...config.unavailableHours };
       if (config.performanceConfig)
         this.performanceConfig = {
           ...this.performanceConfig,
@@ -359,7 +361,7 @@ class CalendarConfigManager {
         updateLoggerFromConfig();
       }
     } catch (error) {
-      console.error("Error al importar configuración:", error);
+      console.error('Error al importar configuración:', error);
     }
   }
 
@@ -371,7 +373,7 @@ class CalendarConfigManager {
   subscribe(callback: () => void): () => void {
     this.subscribers.push(callback);
     return () => {
-      this.subscribers = this.subscribers.filter((cb) => cb !== callback);
+      this.subscribers = this.subscribers.filter(cb => cb !== callback);
     };
   }
 
@@ -379,7 +381,7 @@ class CalendarConfigManager {
    * Notificar a todos los suscriptores sobre cambios en la configuración
    */
   private notifySubscribers(): void {
-    this.subscribers.forEach((callback) => callback());
+    this.subscribers.forEach(callback => callback());
   }
 }
 

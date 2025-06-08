@@ -7,11 +7,13 @@ This repository includes a complete Over-The-Air (OTA) update system for Calenda
 ## Initial Setup
 
 1. **Make sure you have the necessary dependencies:**
+
    ```bash
    npm install @react-native-async-storage/async-storage expo-updates expo-constants
    ```
 
 2. **Verify that app.json has the correct configuration:**
+
    ```json
    "version": "1.0.1",  // This version will be automatically obtained in the code
    "runtimeVersion": {
@@ -119,15 +121,18 @@ eas update --branch rollback-channel-name-YYYYMMDD --message "Rollback to stable
 ## Recommended Workflow
 
 1. **Development**:
+
    - Make changes to your code
    - Test locally with `npm start`
 
 2. **Testing in Staging**:
+
    - Increment the version in `app.json` if necessary
    - Publish to staging: `./update-scripts.sh update:staging -m "Changes to test"`
    - Test on devices configured for the staging channel
 
 3. **Deployment to Production**:
+
    - For critical changes, use progressive rollout:
      ```bash
      ./update-scripts.sh update:prod -m "[v1.0.1] New feature" -p 20
@@ -160,4 +165,4 @@ For more detailed information about the update system, see:
 
 ## Contribution
 
-If you find issues or improvements for the update system, please create an issue or PR in this repository. 
+If you find issues or improvements for the update system, please create an issue or PR in this repository.

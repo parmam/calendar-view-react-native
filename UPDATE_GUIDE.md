@@ -9,6 +9,7 @@ This document provides detailed information about the implementation, configurat
 ### 1. Configuration Files
 
 #### app.json
+
 ```json
 {
   "expo": {
@@ -27,6 +28,7 @@ This document provides detailed information about the implementation, configurat
 ```
 
 #### eas.json
+
 ```json
 {
   "cli": {
@@ -194,6 +196,7 @@ The application implements a monitoring system that:
 ### Error during update
 
 The application includes a recovery system that:
+
 1. Detects critical errors during the update
 2. Offers the user the option to restart the application
 3. Cleans the update cache if necessary
@@ -201,6 +204,7 @@ The application includes a recovery system that:
 ### Conflicts between native and JS versions
 
 If there are changes that require a native update:
+
 1. Increment the version in `app.json`
 2. Perform a new native build with `eas build`
 3. Submit to app stores
@@ -232,4 +236,4 @@ eas update --channel production --message "[v1.0.1] Calendar bug fixes"
 
 This documentation should be updated when significant changes are made to the update system.
 
-Last update: [Current date] 
+Last update: [Current date]

@@ -5,8 +5,8 @@ import React, {
   useCallback,
   ReactNode,
   useEffect,
-} from "react";
-import { logger, LoggerConfig } from "../components/Calendar/utils/logger";
+} from 'react';
+import logger, { LoggerConfig } from '../components/Calendar/utils/logger';
 
 // Create a context for logging configuration
 interface LoggingContextType {
@@ -18,19 +18,21 @@ interface LoggingContextType {
 
 const LoggingContext = createContext<LoggingContextType>({
   loggingEnabled: __DEV__, // Default to enabled in development
-  enableLogging: () => {},
-  disableLogging: () => {},
-  configureLogging: () => {},
+  enableLogging: () => {
+    /* noop */
+  },
+  disableLogging: () => {
+    /* noop */
+  },
+  configureLogging: () => {
+    /* noop */
+  },
 });
 
 // Provider component to wrap the app
-export const LoggingProvider: React.FC<{ children: ReactNode }> = ({
-  children,
-}) => {
+export const LoggingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Get initial state from logger
-  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(
-    logger.isEnabled()
-  );
+  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(logger.isEnabled());
 
   // Enable logging
   const enableLogging = useCallback(() => {

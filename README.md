@@ -25,58 +25,54 @@ npm install react-native-gesture-handler react-native-reanimated
 Then import the `Calendar` component from the package:
 
 ```javascript
-import { Calendar } from "./src/components/Calendar";
+import { Calendar } from './src/components/Calendar';
 ```
 
 ## Usage
 
 ```jsx
-import React, { useState } from "react";
-import { SafeAreaView, View } from "react-native";
-import { Calendar, CalendarEvent } from "./src/components/Calendar";
+import React, { useState } from 'react';
+import { SafeAreaView, View } from 'react-native';
+import { Calendar, CalendarEvent } from './src/components/Calendar';
 
 export default function App() {
   const [events, setEvents] = useState([
     {
-      id: "1",
-      title: "Meeting with Team",
+      id: '1',
+      title: 'Meeting with Team',
       start: new Date(2023, 5, 15, 10, 0),
       end: new Date(2023, 5, 15, 11, 30),
-      color: "#007AFF",
+      color: '#007AFF',
     },
     {
-      id: "2",
-      title: "Lunch Break",
+      id: '2',
+      title: 'Lunch Break',
       start: new Date(2023, 5, 15, 12, 0),
       end: new Date(2023, 5, 15, 13, 0),
-      color: "#FF9500",
+      color: '#FF9500',
     },
     {
-      id: "3",
-      title: "All-Day Event",
+      id: '3',
+      title: 'All-Day Event',
       start: new Date(2023, 5, 15, 0, 0),
       end: new Date(2023, 5, 15, 23, 59),
       isAllDay: true,
-      color: "#4CD964",
+      color: '#4CD964',
     },
   ]);
 
-  const handleEventCreate = (event) => {
-    setEvents((prevEvents) => [...prevEvents, event]);
+  const handleEventCreate = event => {
+    setEvents(prevEvents => [...prevEvents, event]);
   };
 
-  const handleEventUpdate = (updatedEvent) => {
-    setEvents((prevEvents) =>
-      prevEvents.map((event) =>
-        event.id === updatedEvent.id ? updatedEvent : event
-      )
+  const handleEventUpdate = updatedEvent => {
+    setEvents(prevEvents =>
+      prevEvents.map(event => (event.id === updatedEvent.id ? updatedEvent : event))
     );
   };
 
-  const handleEventDelete = (eventId) => {
-    setEvents((prevEvents) =>
-      prevEvents.filter((event) => event.id !== eventId)
-    );
+  const handleEventDelete = eventId => {
+    setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
   };
 
   return (

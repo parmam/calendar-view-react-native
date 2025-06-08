@@ -18,7 +18,7 @@ import {
   OVERLAP_CONFIG,
   DEFAULT_UNAVAILABLE_HOURS,
   PERFORMANCE_CONFIG,
-} from "./calendarConfig";
+} from './calendarConfig';
 
 // Exportar valores de configuración predeterminados
 export {
@@ -33,10 +33,10 @@ export {
   OVERLAP_CONFIG,
   DEFAULT_UNAVAILABLE_HOURS,
   PERFORMANCE_CONFIG,
-} from "./calendarConfig";
+} from './calendarConfig';
 
 // Exportar el administrador de configuración
-export { default as configManager } from "./configManager";
+export { default as configManager } from './configManager';
 
 // Exportar hooks para acceder a la configuración
 export {
@@ -45,14 +45,14 @@ export {
   useLayoutConfig,
   useOverlapConfig,
   useCalendarState,
-} from "./useCalendarConfig";
+} from './useCalendarConfig';
 
 // Exportar una función auxiliar para crear un evento de prueba
 export const createTestEvent = (
   title: string,
   startHour: number,
-  durationMinutes: number = 60,
-  dayOffset: number = 0
+  durationMinutes = 60,
+  dayOffset = 0
 ) => {
   const start = new Date();
   start.setHours(startHour, 0, 0, 0);
@@ -66,7 +66,7 @@ export const createTestEvent = (
     title,
     start,
     end,
-    color: "#007AFF",
+    color: '#007AFF',
   };
 };
 

@@ -1,10 +1,4 @@
-import React, {
-  createContext,
-  useState,
-  useContext,
-  ReactNode,
-  useCallback,
-} from "react";
+import React, { createContext, useState, useContext, ReactNode, useCallback } from 'react';
 import {
   CalendarContextType,
   CalendarEvent,
@@ -16,39 +10,32 @@ import {
   CalendarConfig,
   DragPreviewConfig,
   TimeChangeConfirmation,
-} from "./types";
+} from './types';
 
 // Default theme
 export const defaultTheme: CalendarTheme = {
-  backgroundColor: "#FFFFFF",
-  calendarBackgroundColor: "#F5F5F5",
-  textColor: "#333333",
-  primaryColor: "#007AFF",
-  secondaryColor: "#5AC8FA",
-  todayIndicatorColor: "#FF3B30",
-  selectedDayColor: "rgba(0, 122, 255, 0.2)",
-  eventColors: [
-    "#007AFF",
-    "#5AC8FA",
-    "#FF9500",
-    "#FF3B30",
-    "#4CD964",
-    "#5856D6",
-  ],
-  hourIndicatorColor: "#FF3B30",
-  gridLineColor: "#E5E5EA",
-  headerBackgroundColor: "#FFFFFF",
+  backgroundColor: '#FFFFFF',
+  calendarBackgroundColor: '#F5F5F5',
+  textColor: '#333333',
+  primaryColor: '#007AFF',
+  secondaryColor: '#5AC8FA',
+  todayIndicatorColor: '#FF3B30',
+  selectedDayColor: 'rgba(0, 122, 255, 0.2)',
+  eventColors: ['#007AFF', '#5AC8FA', '#FF9500', '#FF3B30', '#4CD964', '#5856D6'],
+  hourIndicatorColor: '#FF3B30',
+  gridLineColor: '#E5E5EA',
+  headerBackgroundColor: '#FFFFFF',
   // Nuevos estilos
-  unavailableHoursColor: "rgba(230, 230, 230, 0.5)",
-  weekendColor: "#F9F9F9",
-  eventTextColor: "#FFFFFF",
-  dragCreateIndicatorColor: "rgba(0, 122, 255, 0.3)",
-  dragMovePreviewColor: "rgba(33, 150, 243, 0.4)",
-  connectionLineColor: "rgba(33, 150, 243, 0.7)",
-  overlapIndicatorColor: "rgba(255, 59, 48, 0.1)",
-  successColor: "#4CD964",
-  errorColor: "#FF3B30",
-  warningColor: "#FF9500",
+  unavailableHoursColor: 'rgba(230, 230, 230, 0.5)',
+  weekendColor: '#F9F9F9',
+  eventTextColor: '#FFFFFF',
+  dragCreateIndicatorColor: 'rgba(0, 122, 255, 0.3)',
+  dragMovePreviewColor: 'rgba(33, 150, 243, 0.4)',
+  connectionLineColor: 'rgba(33, 150, 243, 0.7)',
+  overlapIndicatorColor: 'rgba(255, 59, 48, 0.1)',
+  successColor: '#4CD964',
+  errorColor: '#FF3B30',
+  warningColor: '#FF9500',
 };
 
 // Default time range
@@ -60,10 +47,10 @@ export const defaultTimeRange: TimeRange = {
 // Default haptic options
 export const defaultHapticOptions: HapticOptions = {
   enabled: true,
-  eventCreate: "light",
-  eventMove: "medium",
-  viewChange: "light",
-  error: "heavy",
+  eventCreate: 'light',
+  eventMove: 'medium',
+  viewChange: 'light',
+  error: 'heavy',
 };
 
 // Default calendar config
@@ -87,11 +74,11 @@ const defaultTimeChangeConfirmation: TimeChangeConfirmation = {
 // Create context with default values
 const CalendarContext = createContext<CalendarContextType>({
   events: [],
-  viewType: "week",
+  viewType: 'week',
   selectedDate: new Date(),
   timeRange: defaultTimeRange,
   theme: defaultTheme,
-  locale: "en-US",
+  locale: 'en-US',
   firstDayOfWeek: 0,
   visibleDays: [0, 1, 2, 3, 4, 5, 6], // All days visible by default
   timeInterval: 30, // 30 minutes
@@ -140,11 +127,11 @@ interface CalendarProviderProps {
 export const CalendarProvider: React.FC<CalendarProviderProps> = ({
   children,
   initialEvents = [],
-  initialViewType = "week",
+  initialViewType = 'week',
   initialSelectedDate = new Date(),
   initialTimeRange = defaultTimeRange,
   theme: customTheme = {},
-  locale = "en-US",
+  locale = 'en-US',
   firstDayOfWeek = 0,
   visibleDays = [0, 1, 2, 3, 4, 5, 6],
   timeInterval = 30,
@@ -166,20 +153,18 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
   setSelectedDate,
 }) => {
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
-  const [internalViewType, setInternalViewType] =
-    useState<CalendarViewType>(initialViewType);
-  const [internalSelectedDate, setInternalSelectedDate] =
-    useState<Date>(initialSelectedDate);
+  const [internalViewType, setInternalViewType] = useState<CalendarViewType>(initialViewType);
+  const [internalSelectedDate, setInternalSelectedDate] = useState<Date>(initialSelectedDate);
   const [timeRange, setTimeRange] = useState<TimeRange>(initialTimeRange);
 
   // Nuevos estados
   const [zoomLevel, setInternalZoomLevel] = useState<number>(initialZoomLevel);
-  const [isDragEnabled, setInternalDragEnabled] =
-    useState<boolean>(initialDragEnabled);
+  const [isDragEnabled, setInternalDragEnabled] = useState<boolean>(initialDragEnabled);
 
   // Add state for time change confirmation
-  const [timeChangeConfirmation, setTimeChangeConfirmation] =
-    useState<TimeChangeConfirmation>(defaultTimeChangeConfirmation);
+  const [timeChangeConfirmation, setTimeChangeConfirmation] = useState<TimeChangeConfirmation>(
+    defaultTimeChangeConfirmation
+  );
 
   // Use the provided setters or fallback to internal state
   const handleViewTypeChange = (newViewType: CalendarViewType) => {
@@ -229,19 +214,17 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
 
   // Event handling functions
   const handleEventCreate = (event: CalendarEvent) => {
-    setEvents((prev) => [...prev, event]);
+    setEvents(prev => [...prev, event]);
     onEventCreate?.(event);
   };
 
   const handleEventUpdate = (updatedEvent: CalendarEvent) => {
-    setEvents((prev) =>
-      prev.map((event) => (event.id === updatedEvent.id ? updatedEvent : event))
-    );
+    setEvents(prev => prev.map(event => (event.id === updatedEvent.id ? updatedEvent : event)));
     onEventUpdate?.(updatedEvent);
   };
 
   const handleEventDelete = (eventId: string) => {
-    setEvents((prev) => prev.filter((event) => event.id !== eventId));
+    setEvents(prev => prev.filter(event => event.id !== eventId));
     onEventDelete?.(eventId);
   };
 
@@ -313,11 +296,7 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
     confirmTimeChange,
   };
 
-  return (
-    <CalendarContext.Provider value={value}>
-      {children}
-    </CalendarContext.Provider>
-  );
+  return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 };
 
 export const useCalendar = () => useContext(CalendarContext);

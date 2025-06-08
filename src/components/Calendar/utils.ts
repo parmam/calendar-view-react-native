@@ -1,31 +1,27 @@
-import { CalendarEvent, RecurrenceRule } from "./types";
+import { CalendarEvent, RecurrenceRule } from './types';
 
 // Date formatting
-export const formatDate = (date: Date, locale = "en-US"): string => {
-  return date.toLocaleDateString(locale, { day: "numeric" });
+export const formatDate = (date: Date, locale = 'en-US'): string => {
+  return date.toLocaleDateString(locale, { day: 'numeric' });
 };
 
-export const formatMonth = (date: Date, locale = "en-US"): string => {
-  return date.toLocaleDateString(locale, { month: "long" });
+export const formatMonth = (date: Date, locale = 'en-US'): string => {
+  return date.toLocaleDateString(locale, { month: 'long' });
 };
 
-export const formatYear = (date: Date, locale = "en-US"): string => {
-  return date.toLocaleDateString(locale, { year: "numeric" });
+export const formatYear = (date: Date, locale = 'en-US'): string => {
+  return date.toLocaleDateString(locale, { year: 'numeric' });
 };
 
-export const formatTime = (date: Date, locale = "en-US"): string => {
+export const formatTime = (date: Date, locale = 'en-US'): string => {
   return date.toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
+    hour: '2-digit',
+    minute: '2-digit',
   });
 };
 
-export const getDayName = (
-  date: Date,
-  locale = "en-US",
-  short = false
-): string => {
-  return date.toLocaleDateString(locale, { weekday: short ? "short" : "long" });
+export const getDayName = (date: Date, locale = 'en-US', short = false): string => {
+  return date.toLocaleDateString(locale, { weekday: short ? 'short' : 'long' });
 };
 
 // Date calculations
@@ -107,10 +103,7 @@ export const getEventDuration = (event: CalendarEvent): number => {
   return event.end.getTime() - event.start.getTime();
 };
 
-export const eventOverlaps = (
-  eventA: CalendarEvent,
-  eventB: CalendarEvent
-): boolean => {
+export const eventOverlaps = (eventA: CalendarEvent, eventB: CalendarEvent): boolean => {
   // Check for time overlap
   return (
     (eventA.start >= eventB.start && eventA.start < eventB.end) ||
@@ -123,7 +116,7 @@ export const findOverlappingEvents = (
   event: CalendarEvent,
   events: CalendarEvent[]
 ): CalendarEvent[] => {
-  return events.filter((e) => e.id !== event.id && eventOverlaps(event, e));
+  return events.filter(e => e.id !== event.id && eventOverlaps(event, e));
 };
 
 export const sortEventsByTime = (events: CalendarEvent[]): CalendarEvent[] => {
@@ -141,7 +134,7 @@ export const sortEventsByTime = (events: CalendarEvent[]): CalendarEvent[] => {
 export function filterEventsByDay(
   events: CalendarEvent[],
   date: Date,
-  includeAllDay: boolean = false
+  includeAllDay = false
 ): CalendarEvent[] {
   // Crear fechas de inicio y fin del día para comparar
   const startOfDay = new Date(date);
@@ -150,7 +143,7 @@ export function filterEventsByDay(
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
-  return events.filter((event) => {
+  return events.filter(event => {
     // Skip all-day events unless explicitly included
     if (event.isAllDay && !includeAllDay) {
       return false;
@@ -173,24 +166,18 @@ export function filterEventsByDay(
 }
 
 // Helper function to check if the date matches the recurrence rule
-export const matchesRecurrenceRule = (
-  date: Date,
-  start: Date,
-  rule: RecurrenceRule
-): boolean => {
+export const matchesRecurrenceRule = (date: Date, start: Date, rule: RecurrenceRule): boolean => {
   // Simplistic implementation - in a real app, you'd want a more robust solution
   if (rule.until && date > rule.until) return false;
 
-  const diff = Math.floor(
-    (date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-  );
+  const diff = Math.floor((date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (rule.frequency === "daily") {
+  if (rule.frequency === 'daily') {
     const interval = rule.interval || 1;
     return diff % interval === 0;
   }
 
-  if (rule.frequency === "weekly") {
+  if (rule.frequency === 'weekly') {
     const interval = rule.interval || 1;
     const weekDiff = Math.floor(diff / 7);
 
@@ -198,7 +185,7 @@ export const matchesRecurrenceRule = (
 
     // Check if the day of week matches
     if (rule.byDay) {
-      const days = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+      const days = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
       const dateDay = days[date.getDay()];
       return rule.byDay.includes(dateDay as any);
     }
@@ -206,12 +193,10 @@ export const matchesRecurrenceRule = (
     return date.getDay() === start.getDay();
   }
 
-  if (rule.frequency === "monthly") {
+  if (rule.frequency === 'monthly') {
     const interval = rule.interval || 1;
     const monthDiff =
-      (date.getFullYear() - start.getFullYear()) * 12 +
-      date.getMonth() -
-      start.getMonth();
+      (date.getFullYear() - start.getFullYear()) * 12 + date.getMonth() - start.getMonth();
 
     if (monthDiff % interval !== 0) return false;
 
@@ -223,7 +208,7 @@ export const matchesRecurrenceRule = (
     return date.getDate() === start.getDate();
   }
 
-  if (rule.frequency === "yearly") {
+  if (rule.frequency === 'yearly') {
     const interval = rule.interval || 1;
     const yearDiff = date.getFullYear() - start.getFullYear();
 
@@ -249,11 +234,7 @@ export const matchesRecurrenceRule = (
 };
 
 // Convert 24-hour format to Date object
-export const timeToDate = (
-  date: Date,
-  hours: number,
-  minutes: number
-): Date => {
+export const timeToDate = (date: Date, hours: number, minutes: number): Date => {
   const result = new Date(date);
   result.setHours(hours, minutes, 0, 0);
   return result;
@@ -357,10 +338,7 @@ export function getEventPositionExact(
 }
 
 // Function to check if two events overlap
-export function eventsOverlap(
-  event1: CalendarEvent,
-  event2: CalendarEvent
-): boolean {
+export function eventsOverlap(event1: CalendarEvent, event2: CalendarEvent): boolean {
   return (
     (event1.start < event2.end && event1.end > event2.start) || // Standard overlap
     Math.abs(event1.start.getTime() - event2.end.getTime()) < 60000 || // Events almost touching (less than 1 minute apart)
@@ -369,9 +347,7 @@ export function eventsOverlap(
 }
 
 // Función mejorada para agrupar eventos solapados
-export function groupOverlappingEvents(
-  events: CalendarEvent[]
-): CalendarEvent[][] {
+export function groupOverlappingEvents(events: CalendarEvent[]): CalendarEvent[][] {
   if (!events.length) return [];
 
   // Ordenar eventos primero por hora de inicio y luego por duración
@@ -380,11 +356,7 @@ export function groupOverlappingEvents(
     if (startDiff !== 0) return startDiff;
 
     // Para eventos que comienzan al mismo tiempo, priorizar los más largos
-    return (
-      b.end.getTime() -
-      b.start.getTime() -
-      (a.end.getTime() - a.start.getTime())
-    );
+    return b.end.getTime() - b.start.getTime() - (a.end.getTime() - a.start.getTime());
   });
 
   // Matriz de adyacencia para representar las colisiones entre eventos
@@ -421,7 +393,7 @@ export function groupOverlappingEvents(
     if (!visited[i]) {
       const currentGroup: number[] = [];
       dfs(i, currentGroup);
-      groups.push(currentGroup.map((idx) => sortedEvents[idx]));
+      groups.push(currentGroup.map(idx => sortedEvents[idx]));
     }
   }
 
@@ -436,7 +408,7 @@ export function findMaxConcurrentEvents(events: CalendarEvent[]): number {
   type TimePoint = { time: number; isStart: boolean };
   const timePoints: TimePoint[] = [];
 
-  events.forEach((event) => {
+  events.forEach(event => {
     timePoints.push({ time: event.start.getTime(), isStart: true });
     timePoints.push({ time: event.end.getTime(), isStart: false });
   });
@@ -452,7 +424,7 @@ export function findMaxConcurrentEvents(events: CalendarEvent[]): number {
   let maxConcurrent = 0;
 
   // Recorrer puntos para encontrar el máximo de eventos simultáneos
-  timePoints.forEach((point) => {
+  timePoints.forEach(point => {
     if (point.isStart) {
       concurrent++;
     } else {

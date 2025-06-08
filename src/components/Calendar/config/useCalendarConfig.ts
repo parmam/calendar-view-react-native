@@ -6,8 +6,8 @@
  * automáticamente el componente cuando las configuraciones cambien.
  */
 
-import { useState, useEffect, useCallback } from "react";
-import configManager from "./configManager";
+import { useState, useEffect, useCallback } from 'react';
+import configManager from './configManager';
 import {
   CalendarTheme,
   TimeRange,
@@ -15,50 +15,39 @@ import {
   CalendarConfig,
   UnavailableHours,
   CalendarViewType,
-} from "../types";
+} from '../types';
 import {
   LAYOUT_CONFIG,
   ANIMATION_CONFIG,
   OVERLAP_CONFIG,
   PERFORMANCE_CONFIG,
   INITIAL_CALENDAR_STATE,
-} from "./calendarConfig";
-import { updateLoggerFromConfig } from "../utils/logger";
+} from './calendarConfig';
+import { updateLoggerFromConfig } from '../utils/logger';
 
 /**
  * Hook para acceder a todas las configuraciones del calendario
  */
 export const useCalendarConfig = () => {
   // Estados para cada tipo de configuración
-  const [theme, setThemeState] = useState<CalendarTheme>(
-    configManager.getTheme()
-  );
-  const [timeRange, setTimeRangeState] = useState<TimeRange>(
-    configManager.getTimeRange()
-  );
+  const [theme, setThemeState] = useState<CalendarTheme>(configManager.getTheme());
+  const [timeRange, setTimeRangeState] = useState<TimeRange>(configManager.getTimeRange());
   const [hapticOptions, setHapticOptionsState] = useState<HapticOptions>(
     configManager.getHapticOptions()
   );
   const [calendarConfig, setCalendarConfigState] = useState<CalendarConfig>(
     configManager.getCalendarConfig()
   );
-  const [layoutConfig, setLayoutConfigState] = useState(
-    configManager.getLayoutConfig()
+  const [layoutConfig, setLayoutConfigState] = useState(configManager.getLayoutConfig());
+  const [animationConfig, setAnimationConfigState] = useState(configManager.getAnimationConfig());
+  const [overlapConfig, setOverlapConfigState] = useState(configManager.getOverlapConfig());
+  const [unavailableHours, setUnavailableHoursState] = useState<UnavailableHours | null>(
+    configManager.getUnavailableHours()
   );
-  const [animationConfig, setAnimationConfigState] = useState(
-    configManager.getAnimationConfig()
-  );
-  const [overlapConfig, setOverlapConfigState] = useState(
-    configManager.getOverlapConfig()
-  );
-  const [unavailableHours, setUnavailableHoursState] =
-    useState<UnavailableHours | null>(configManager.getUnavailableHours());
   const [performanceConfig, setPerformanceConfigState] = useState(
     configManager.getPerformanceConfig()
   );
-  const [calendarState, setCalendarStateState] = useState(
-    configManager.getCalendarState()
-  );
+  const [calendarState, setCalendarStateState] = useState(configManager.getCalendarState());
 
   // Funciones para actualizar configuraciones
   const updateTheme = useCallback((newTheme: Partial<CalendarTheme>) => {
@@ -69,69 +58,42 @@ export const useCalendarConfig = () => {
     configManager.updateTimeRange(newTimeRange);
   }, []);
 
-  const updateHapticOptions = useCallback(
-    (newOptions: Partial<HapticOptions>) => {
-      configManager.updateHapticOptions(newOptions);
-    },
-    []
-  );
+  const updateHapticOptions = useCallback((newOptions: Partial<HapticOptions>) => {
+    configManager.updateHapticOptions(newOptions);
+  }, []);
 
-  const updateCalendarConfig = useCallback(
-    (newConfig: Partial<CalendarConfig>) => {
-      configManager.updateCalendarConfig(newConfig);
-    },
-    []
-  );
+  const updateCalendarConfig = useCallback((newConfig: Partial<CalendarConfig>) => {
+    configManager.updateCalendarConfig(newConfig);
+  }, []);
 
-  const updateLayoutConfig = useCallback(
-    (newConfig: Partial<typeof LAYOUT_CONFIG>) => {
-      configManager.updateLayoutConfig(newConfig);
-    },
-    []
-  );
+  const updateLayoutConfig = useCallback((newConfig: Partial<typeof LAYOUT_CONFIG>) => {
+    configManager.updateLayoutConfig(newConfig);
+  }, []);
 
-  const updateAnimationConfig = useCallback(
-    (newConfig: Partial<typeof ANIMATION_CONFIG>) => {
-      configManager.updateAnimationConfig(newConfig);
-    },
-    []
-  );
+  const updateAnimationConfig = useCallback((newConfig: Partial<typeof ANIMATION_CONFIG>) => {
+    configManager.updateAnimationConfig(newConfig);
+  }, []);
 
-  const updateOverlapConfig = useCallback(
-    (newConfig: Partial<typeof OVERLAP_CONFIG>) => {
-      configManager.updateOverlapConfig(newConfig);
-    },
-    []
-  );
+  const updateOverlapConfig = useCallback((newConfig: Partial<typeof OVERLAP_CONFIG>) => {
+    configManager.updateOverlapConfig(newConfig);
+  }, []);
 
-  const updateUnavailableHours = useCallback(
-    (newHours: UnavailableHours | null) => {
-      configManager.updateUnavailableHours(newHours);
-    },
-    []
-  );
+  const updateUnavailableHours = useCallback((newHours: UnavailableHours | null) => {
+    configManager.updateUnavailableHours(newHours);
+  }, []);
 
-  const updatePerformanceConfig = useCallback(
-    (newConfig: Partial<typeof PERFORMANCE_CONFIG>) => {
-      configManager.updatePerformanceConfig(newConfig);
+  const updatePerformanceConfig = useCallback((newConfig: Partial<typeof PERFORMANCE_CONFIG>) => {
+    configManager.updatePerformanceConfig(newConfig);
 
-      // Si la configuración incluye cambios en el logging, actualizar el logger
-      if (
-        newConfig.LOGGING_ENABLED !== undefined ||
-        newConfig.LOGGING_LEVEL !== undefined
-      ) {
-        updateLoggerFromConfig();
-      }
-    },
-    []
-  );
+    // Si la configuración incluye cambios en el logging, actualizar el logger
+    if (newConfig.LOGGING_ENABLED !== undefined || newConfig.LOGGING_LEVEL !== undefined) {
+      updateLoggerFromConfig();
+    }
+  }, []);
 
-  const updateCalendarState = useCallback(
-    (newState: Partial<typeof INITIAL_CALENDAR_STATE>) => {
-      configManager.updateCalendarState(newState);
-    },
-    []
-  );
+  const updateCalendarState = useCallback((newState: Partial<typeof INITIAL_CALENDAR_STATE>) => {
+    configManager.updateCalendarState(newState);
+  }, []);
 
   // Función para restablecer todas las configuraciones
   const resetToDefaults = useCallback(() => {
@@ -208,9 +170,7 @@ export const useCalendarConfig = () => {
 
 // Hook para acceder solo al tema
 export const useCalendarTheme = () => {
-  const [theme, setThemeState] = useState<CalendarTheme>(
-    configManager.getTheme()
-  );
+  const [theme, setThemeState] = useState<CalendarTheme>(configManager.getTheme());
 
   const updateTheme = useCallback((newTheme: Partial<CalendarTheme>) => {
     configManager.updateTheme(newTheme);
@@ -229,16 +189,11 @@ export const useCalendarTheme = () => {
 
 // Hook para acceder a la configuración de layout
 export const useLayoutConfig = () => {
-  const [layoutConfig, setLayoutConfigState] = useState(
-    configManager.getLayoutConfig()
-  );
+  const [layoutConfig, setLayoutConfigState] = useState(configManager.getLayoutConfig());
 
-  const updateLayoutConfig = useCallback(
-    (newConfig: Partial<typeof LAYOUT_CONFIG>) => {
-      configManager.updateLayoutConfig(newConfig);
-    },
-    []
-  );
+  const updateLayoutConfig = useCallback((newConfig: Partial<typeof LAYOUT_CONFIG>) => {
+    configManager.updateLayoutConfig(newConfig);
+  }, []);
 
   useEffect(() => {
     const refreshConfig = () => {
@@ -253,16 +208,11 @@ export const useLayoutConfig = () => {
 
 // Hook para acceder a la configuración de solapamiento de eventos
 export const useOverlapConfig = () => {
-  const [overlapConfig, setOverlapConfigState] = useState(
-    configManager.getOverlapConfig()
-  );
+  const [overlapConfig, setOverlapConfigState] = useState(configManager.getOverlapConfig());
 
-  const updateOverlapConfig = useCallback(
-    (newConfig: Partial<typeof OVERLAP_CONFIG>) => {
-      configManager.updateOverlapConfig(newConfig);
-    },
-    []
-  );
+  const updateOverlapConfig = useCallback((newConfig: Partial<typeof OVERLAP_CONFIG>) => {
+    configManager.updateOverlapConfig(newConfig);
+  }, []);
 
   useEffect(() => {
     const refreshConfig = () => {
@@ -277,16 +227,11 @@ export const useOverlapConfig = () => {
 
 // Hook para acceder al estado básico del calendario (vista, fecha, etc.)
 export const useCalendarState = () => {
-  const [calendarState, setCalendarStateState] = useState(
-    configManager.getCalendarState()
-  );
+  const [calendarState, setCalendarStateState] = useState(configManager.getCalendarState());
 
-  const updateCalendarState = useCallback(
-    (newState: Partial<typeof INITIAL_CALENDAR_STATE>) => {
-      configManager.updateCalendarState(newState);
-    },
-    []
-  );
+  const updateCalendarState = useCallback((newState: Partial<typeof INITIAL_CALENDAR_STATE>) => {
+    configManager.updateCalendarState(newState);
+  }, []);
 
   useEffect(() => {
     const refreshState = () => {
@@ -301,11 +246,9 @@ export const useCalendarState = () => {
     updateCalendarState,
     // Shortcuts para valores comunes
     viewType: calendarState.viewType,
-    setViewType: (viewType: CalendarViewType) =>
-      updateCalendarState({ viewType }),
+    setViewType: (viewType: CalendarViewType) => updateCalendarState({ viewType }),
     selectedDate: calendarState.selectedDate,
-    setSelectedDate: (selectedDate: Date) =>
-      updateCalendarState({ selectedDate }),
+    setSelectedDate: (selectedDate: Date) => updateCalendarState({ selectedDate }),
     zoomLevel: calendarState.zoomLevel,
     setZoomLevel: (zoomLevel: number) => updateCalendarState({ zoomLevel }),
   };

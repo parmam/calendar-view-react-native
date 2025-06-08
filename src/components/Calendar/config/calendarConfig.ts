@@ -16,7 +16,7 @@ import {
   UnavailableHours,
   DragPreviewConfig,
   CalendarViewType,
-} from "../types";
+} from '../types';
 
 /**
  * Constantes de diseño/layout
@@ -150,34 +150,34 @@ export const ANIMATION_CONFIG = {
  * warningColor: Color para indicaciones de advertencia.
  */
 export const DEFAULT_THEME: CalendarTheme = {
-  backgroundColor: "#FFFFFF",
-  calendarBackgroundColor: "#F5F5F5",
-  textColor: "#333333",
-  primaryColor: "#007AFF",
-  secondaryColor: "#5AC8FA",
-  todayIndicatorColor: "#FF3B30",
-  selectedDayColor: "rgba(0, 122, 255, 0.2)",
+  backgroundColor: '#FFFFFF',
+  calendarBackgroundColor: '#F5F5F5',
+  textColor: '#333333',
+  primaryColor: '#007AFF',
+  secondaryColor: '#5AC8FA',
+  todayIndicatorColor: '#FF3B30',
+  selectedDayColor: 'rgba(0, 122, 255, 0.2)',
   eventColors: [
-    "#007AFF", // Azul
-    "#5AC8FA", // Azul claro
-    "#FF9500", // Naranja
-    "#FF3B30", // Rojo
-    "#4CD964", // Verde
-    "#5856D6", // Púrpura
+    '#007AFF', // Azul
+    '#5AC8FA', // Azul claro
+    '#FF9500', // Naranja
+    '#FF3B30', // Rojo
+    '#4CD964', // Verde
+    '#5856D6', // Púrpura
   ],
-  hourIndicatorColor: "#FF3B30",
-  gridLineColor: "#E5E5EA",
-  headerBackgroundColor: "#FFFFFF",
-  unavailableHoursColor: "rgba(230, 230, 230, 0.5)",
-  weekendColor: "#F9F9F9",
-  eventTextColor: "#FFFFFF",
-  dragCreateIndicatorColor: "rgba(0, 122, 255, 0.3)",
-  dragMovePreviewColor: "rgba(33, 150, 243, 0.4)",
-  connectionLineColor: "rgba(33, 150, 243, 0.7)",
-  overlapIndicatorColor: "rgba(255, 59, 48, 0.1)",
-  successColor: "#4CD964",
-  errorColor: "#FF3B30",
-  warningColor: "#FF9500",
+  hourIndicatorColor: '#FF3B30',
+  gridLineColor: '#E5E5EA',
+  headerBackgroundColor: '#FFFFFF',
+  unavailableHoursColor: 'rgba(230, 230, 230, 0.5)',
+  weekendColor: '#F9F9F9',
+  eventTextColor: '#FFFFFF',
+  dragCreateIndicatorColor: 'rgba(0, 122, 255, 0.3)',
+  dragMovePreviewColor: 'rgba(33, 150, 243, 0.4)',
+  connectionLineColor: 'rgba(33, 150, 243, 0.7)',
+  overlapIndicatorColor: 'rgba(255, 59, 48, 0.1)',
+  successColor: '#4CD964',
+  errorColor: '#FF3B30',
+  warningColor: '#FF9500',
 };
 
 /**
@@ -215,10 +215,10 @@ export const DEFAULT_TIME_RANGE: TimeRange = {
  */
 export const DEFAULT_HAPTIC_OPTIONS: HapticOptions = {
   enabled: true,
-  eventCreate: "light",
-  eventMove: "medium",
-  viewChange: "light",
-  error: "heavy",
+  eventCreate: 'light',
+  eventMove: 'medium',
+  viewChange: 'light',
+  error: 'heavy',
 };
 
 /**
@@ -332,14 +332,14 @@ export const DEFAULT_CALENDAR_CONFIG: CalendarConfig = {
  * locale: Configuración regional para formato de fechas y nombres de días/meses.
  */
 export const INITIAL_CALENDAR_STATE = {
-  viewType: "week" as CalendarViewType,
+  viewType: 'week' as CalendarViewType,
   selectedDate: new Date(),
   zoomLevel: 1,
   isDragEnabled: true,
   firstDayOfWeek: 0, // 0 = Domingo, 1 = Lunes
   visibleDays: [0, 1, 2, 3, 4, 5, 6], // Todos los días visibles por defecto
   timeInterval: 15, // Intervalo de tiempo en minutos
-  locale: "es-ES", // Localización predeterminada
+  locale: 'es-ES', // Localización predeterminada
 };
 
 /**
@@ -414,5 +414,5 @@ export const PERFORMANCE_CONFIG = {
   DEBOUNCE_SCROLL: 50,
   THROTTLE_RESIZE: 100,
   LOGGING_ENABLED: __DEV__, // Habilitado solo en desarrollo por defecto
-  LOGGING_LEVEL: "info", // Nivel de log: "debug", "info", "warn", "error"
+  LOGGING_LEVEL: 'info', // Nivel de log: "debug", "info", "warn", "error"
 };
