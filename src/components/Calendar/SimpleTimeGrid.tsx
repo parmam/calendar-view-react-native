@@ -41,6 +41,7 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
     visibleDays,
     onTimeSlotPress,
     zoomLevel,
+    showTimeChangeConfirmation,
   } = useCalendar();
 
   const [gridWidth, setGridWidth] = useState(SCREEN_WIDTH - TIME_LABEL_WIDTH);
@@ -133,6 +134,25 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
     return positioned;
   };
 
+  // Handle event update with confirmation
+  const handleEventUpdate = useCallback(
+    (updatedEvent: CalendarEvent) => {
+      if (showTimeChangeConfirmation) {
+        // Use the confirmation modal
+        showTimeChangeConfirmation(updatedEvent, updatedEvent.start, updatedEvent.end);
+        logger.debug('Showing confirmation modal for event update', {
+          eventId: updatedEvent.id,
+          newStart: updatedEvent.start,
+          newEnd: updatedEvent.end,
+        });
+      } else {
+        // Directly update if no confirmation modal available
+        onEventUpdate?.(updatedEvent);
+      }
+    },
+    [onEventUpdate, showTimeChangeConfirmation, logger]
+  );
+
   // Render events for a day
   const renderEvents = (dayIndex: number) => {
     const date = dates[dayIndex];
@@ -152,7 +172,33 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
           height={height}
           columnWidth={columnWidth}
           dayIndex={dayIndex}
-          onEventUpdate={onEventUpdate}
+          onEventUpdate={handleEventUpdate}
+        />
+      );
+    });
+  };
+
+  // Render vertical dividers between columns
+  const renderColumnDividers = () => {
+    // Don't render dividers for day view
+    if (viewType === 'day') return null;
+
+    return dates.map((_, index) => {
+      // Skip the first divider (left edge)
+      if (index === 0) return null;
+
+      return (
+        <View
+          key={`divider-${index}`}
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: index * columnWidth,
+            width: 1,
+            backgroundColor: theme.gridLineColor,
+            zIndex: 1,
+          }}
         />
       );
     });
@@ -198,6 +244,9 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
                 />
               ))}
             </View>
+
+            {/* Column dividers */}
+            {renderColumnDividers()}
 
             {/* Day columns */}
             {dates.map((date, dayIndex) => (

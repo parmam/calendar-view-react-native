@@ -27,7 +27,9 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
   dayIndex,
   onEventUpdate,
 }) => {
-  const { onEventPress, theme, locale, hourHeight, timeInterval } = useCalendar();
+  const { onEventPress, theme, locale, hourHeight, timeInterval, showTimeChangeConfirmation } =
+    useCalendar();
+
   const logger = useLogger('DraggableEvent');
   const [isValidDrop, setIsValidDrop] = useState(true);
 
@@ -42,7 +44,6 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
     logger.debug(
       `DraggableEvent mounted: ${event.id}, dragEnabled: ${eventWithDraggable.isDraggable}`
     );
-
     return () => {
       logger.debug(`DraggableEvent unmounted: ${event.id}`);
     };
@@ -111,8 +112,8 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
         hasUpdateHandler: !!onEventUpdate,
       });
 
-      if (!onEventUpdate || !isValidDrop) {
-        logger.debug('Drag cancelled', { eventId: event.id, isValidDrop });
+      if (!isValidDrop) {
+        logger.debug('Drag cancelled - invalid drop position', { eventId: event.id });
         return;
       }
 
@@ -148,7 +149,7 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
         end: newEnd,
       };
 
-      logger.debug('Event updated', {
+      logger.debug('Event position changed', {
         eventId: event.id,
         oldStart: event.start.toISOString(),
         newStart: updatedEvent.start.toISOString(),
@@ -156,9 +157,26 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
         dayDiff,
       });
 
-      onEventUpdate(updatedEvent);
+      // Show confirmation modal if available
+      if (showTimeChangeConfirmation) {
+        logger.debug('Showing confirmation modal', { eventId: event.id });
+        showTimeChangeConfirmation(event, newStart, newEnd);
+      } else if (onEventUpdate) {
+        // Directly update if no confirmation available
+        logger.debug('Directly updating event (no confirmation)', { eventId: event.id });
+        onEventUpdate(updatedEvent);
+      }
     },
-    [event, onEventUpdate, isValidDrop, hourHeight, timeInterval, columnWidth, logger]
+    [
+      event,
+      onEventUpdate,
+      isValidDrop,
+      hourHeight,
+      timeInterval,
+      columnWidth,
+      logger,
+      showTimeChangeConfirmation,
+    ]
   );
 
   // Initialize draggable
