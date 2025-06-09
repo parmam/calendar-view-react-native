@@ -124,10 +124,12 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
           ...event,
           left: index * groupWidth + 2,
           width: groupWidth - 4,
+          isDraggable: true,
         });
       });
     }
 
+    logger.debug(`Positioned ${positioned.length} events for rendering`);
     return positioned;
   };
 

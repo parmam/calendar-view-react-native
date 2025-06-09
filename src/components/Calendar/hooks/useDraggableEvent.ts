@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from 'react';
-import { PanResponder, Animated, LayoutRectangle } from 'react-native';
+import { PanResponder, Animated, LayoutRectangle, Platform } from 'react-native';
 import { CalendarEvent } from '../types';
+import { useLogger } from '../utils/logger';
 
 interface UseDraggableEventProps {
   event: CalendarEvent;
@@ -21,6 +22,9 @@ export const useDraggableEvent = ({
   onDragMove,
   onDragEnd,
 }: UseDraggableEventProps) => {
+  // Setup logger
+  const logger = useLogger('useDraggableEvent');
+
   // Animation values
   const pan = useRef(new Animated.ValueXY()).current;
   const scale = useRef(new Animated.Value(1)).current;
@@ -33,15 +37,29 @@ export const useDraggableEvent = ({
   // Track drag start position
   const dragStartPosition = useRef({ x: 0, y: 0 });
 
-  // Create pan responder
+  // Log if the event is draggable
+  const canDrag = event.isDraggable !== false;
+  logger.debug(`Event drag check: ${event.id}, canDrag: ${canDrag}`);
+
+  // Create pan responder with improved responsiveness
   const panResponder = useRef(
     PanResponder.create({
-      // Ask to be the responder
-      onStartShouldSetPanResponder: () => event.isDraggable !== false,
-      onMoveShouldSetPanResponder: () => event.isDraggable !== false,
+      // More permissive gesture detection
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to deliberate drags (filter out taps)
+        const { dx, dy } = gestureState;
+        const dragDistance = Math.sqrt(dx * dx + dy * dy);
+        const shouldRespond = canDrag && dragDistance > 5;
+        logger.debug(`Move should respond: ${shouldRespond}, distance: ${dragDistance}`);
+        return shouldRespond;
+      },
+      onMoveShouldSetPanResponderCapture: () => false,
 
       // The gesture has started
       onPanResponderGrant: (evt, gestureState) => {
+        logger.debug(`Drag GRANTED for event: ${event.id}`);
         setIsDragging(true);
 
         // Store initial position
@@ -52,8 +70,8 @@ export const useDraggableEvent = ({
 
         // Set the initial value to the current state
         pan.setOffset({
-          x: (pan.x as any)._value,
-          y: (pan.y as any)._value,
+          x: (pan.x as any)['_value'] || 0,
+          y: (pan.y as any)['_value'] || 0,
         });
         pan.setValue({ x: 0, y: 0 });
 
@@ -75,17 +93,21 @@ export const useDraggableEvent = ({
 
       // The gesture is moving
       onPanResponderMove: (evt, gestureState) => {
+        const { dx, dy } = gestureState;
+        logger.debug(`Drag MOVING for event: ${event.id}, dx: ${dx}, dy: ${dy}`);
+
         // Update pan position
         pan.setValue({
-          x: gestureState.dx,
-          y: gestureState.dy,
+          x: dx,
+          y: dy,
         });
 
-        onDragMove?.(gestureState.dx, gestureState.dy);
+        onDragMove?.(dx, dy);
       },
 
       // The gesture has ended
       onPanResponderRelease: (evt, gestureState) => {
+        logger.debug(`Drag RELEASED for event: ${event.id}`);
         setIsDragging(false);
 
         // Flatten the offset to avoid issues
@@ -118,6 +140,7 @@ export const useDraggableEvent = ({
 
       // The gesture was cancelled
       onPanResponderTerminate: () => {
+        logger.debug(`Drag TERMINATED for event: ${event.id}`);
         setIsDragging(false);
 
         // Reset animations

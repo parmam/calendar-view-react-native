@@ -66,6 +66,7 @@ const generateSampleEvents = (): CalendarEvent[] => {
     start: event2Start,
     end: new Date(event2Start.getTime() + 90 * 60000), // 90 minutos de duración
     color: '#007AFF',
+    isDraggable: true,
   });
 
   // Event 3: "Almuerzo" on day 10
@@ -76,6 +77,7 @@ const generateSampleEvents = (): CalendarEvent[] => {
     start: event3Start,
     end: new Date(event3Start.getTime() + 90 * 60000), // 90 minutos de duración
     color: '#5AC8FA',
+    isDraggable: true,
   });
 
   // Event 4: "Doctor" on day 15
@@ -162,6 +164,7 @@ const generateSampleEvents = (): CalendarEvent[] => {
     start: event11Start,
     end: new Date(event11Start.getTime() + 90 * 60000), // 90 minutos de duración
     color: '#4CD964',
+    isDraggable: true,
     recurrence: {
       frequency: 'daily',
       interval: 1,
@@ -569,7 +572,14 @@ const AppContent = () => {
             initialDragEnabled={true}
             unavailableHours={unavailableHours}
             hapticOptions={hapticOptions}
-            calendarConfig={calendarConfig}
+            calendarConfig={{
+              ...calendarConfig,
+              dragPreviewConfig: {
+                ...(calendarConfig.dragPreviewConfig || {}),
+                previewOffset: 20,
+                connectionLineWidth: 2,
+              },
+            }}
           />
         </View>
 

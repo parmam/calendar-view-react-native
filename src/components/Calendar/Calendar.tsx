@@ -296,8 +296,8 @@ const CalendarContent: React.FC = () => {
 
   // Configurar los handlers de drag usando gestión de estado mejorada
   const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => isDragEnabled,
-    onMoveShouldSetPanResponder: () => isDragEnabled,
+    onStartShouldSetPanResponder: () => Boolean(isDragEnabled),
+    onMoveShouldSetPanResponder: () => Boolean(isDragEnabled),
     onPanResponderGrant: (e: GestureResponderEvent) => {
       // Guardar la hora de inicio del drag
       const { locationX, locationY } = e.nativeEvent;

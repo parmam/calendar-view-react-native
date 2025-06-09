@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useCallback, useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
 import { useCalendar } from './CalendarContext';
 import { formatTime } from './utils';
 import { CalendarEvent } from './types';
@@ -30,6 +30,23 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
   const { onEventPress, theme, locale, hourHeight, timeInterval } = useCalendar();
   const logger = useLogger('DraggableEvent');
   const [isValidDrop, setIsValidDrop] = useState(true);
+
+  // Explicitly ensure isDraggable is set
+  const eventWithDraggable = {
+    ...event,
+    isDraggable: event.isDraggable !== false,
+  };
+
+  // Log on mount
+  useEffect(() => {
+    logger.debug(
+      `DraggableEvent mounted: ${event.id}, dragEnabled: ${eventWithDraggable.isDraggable}`
+    );
+
+    return () => {
+      logger.debug(`DraggableEvent unmounted: ${event.id}`);
+    };
+  }, [event.id, eventWithDraggable.isDraggable, logger]);
 
   // Calculate text color based on background
   const getTextColor = (bg: string): string => {
@@ -72,6 +89,7 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
       setIsValidDrop(isValid);
 
       logger.debug('Drag move', {
+        eventId: event.id,
         deltaX,
         deltaY,
         minuteDiff,
@@ -79,14 +97,22 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
         isValid,
       });
     },
-    [event.start, hourHeight, timeInterval, columnWidth, logger]
+    [event.id, event.start, hourHeight, timeInterval, columnWidth, logger]
   );
 
   // Handle drag end
   const handleDragEnd = useCallback(
     (deltaX: number, deltaY: number) => {
+      logger.debug('Drag end reached', {
+        eventId: event.id,
+        deltaX,
+        deltaY,
+        isValidDrop,
+        hasUpdateHandler: !!onEventUpdate,
+      });
+
       if (!onEventUpdate || !isValidDrop) {
-        logger.debug('Drag cancelled', { isValidDrop });
+        logger.debug('Drag cancelled', { eventId: event.id, isValidDrop });
         return;
       }
 
@@ -98,7 +124,7 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
       const dayDiff = Math.round(deltaX / columnWidth);
 
       if (minuteDiff === 0 && dayDiff === 0) {
-        logger.debug('No change in position');
+        logger.debug('No change in position', { eventId: event.id });
         return;
       }
 
@@ -124,8 +150,8 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
 
       logger.debug('Event updated', {
         eventId: event.id,
-        oldStart: event.start,
-        newStart: updatedEvent.start,
+        oldStart: event.start.toISOString(),
+        newStart: updatedEvent.start.toISOString(),
         minuteDiff,
         dayDiff,
       });
@@ -137,7 +163,7 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
 
   // Initialize draggable
   const { panHandlers, animatedStyle, isDragging, onLayout } = useDraggableEvent({
-    event,
+    event: eventWithDraggable,
     hourHeight,
     timeInterval,
     columnWidth,
@@ -146,11 +172,21 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
     onDragEnd: handleDragEnd,
   });
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
+    logger.debug('Event pressed', { eventId: event.id });
     if (!isDragging) {
       onEventPress?.(event);
     }
-  };
+  }, [event, isDragging, onEventPress, logger]);
+
+  // Log when component renders to help debug
+  logger.debug('DraggableEvent rendering', {
+    eventId: event.id,
+    isDraggable: eventWithDraggable.isDraggable,
+    title: event.title,
+    size: { width, height },
+    position: { left, top },
+  });
 
   return (
     <Animated.View
@@ -167,11 +203,17 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
           backgroundColor,
           borderWidth: !isValidDrop && isDragging ? 2 : 0,
           borderColor: theme.errorColor,
+          zIndex: isDragging ? 999 : 1,
         },
         animatedStyle,
       ]}
     >
-      <TouchableOpacity style={styles.touchable} onPress={handlePress} activeOpacity={0.8}>
+      <TouchableOpacity
+        style={styles.touchable}
+        onPress={handlePress}
+        activeOpacity={0.8}
+        disabled={isDragging} // Disable touch when dragging
+      >
         <View style={styles.content}>
           <Text style={[styles.title, { color: textColor }]} numberOfLines={1}>
             {event.title}
