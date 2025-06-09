@@ -10,9 +10,11 @@ import {
   GestureResponderHandlers,
   TouchableOpacity,
   Animated,
+  Platform,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useCalendar } from './CalendarContext';
+import DraggableEvent from './DraggableEvent';
 import {
   addDays,
   formatTime,
@@ -28,9 +30,8 @@ import {
 } from './utils';
 import { useScrollHandler } from './utils/ScrollHandler';
 import { useLogger } from './utils/logger';
-import Event from './Event';
-import { CalendarEvent, CalendarViewType, SnapLineIndicator } from './types';
 import { useLayoutConfig, useOverlapConfig } from './config';
+import { CalendarEvent, CalendarViewType, SnapLineIndicator } from './types';
 
 // Definir constantes de cuadrícula
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -43,6 +44,7 @@ interface TimeGridProps {
   snapLineIndicator?: SnapLineIndicator | null;
   timeInterval?: number;
   onDragNearEdge?: (distanceFromEdge: number, direction: 'up' | 'down') => void;
+  onEventUpdate?: (event: CalendarEvent) => void;
 }
 
 const TimeGrid: React.FC<TimeGridProps> = ({
@@ -53,6 +55,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
   snapLineIndicator,
   timeInterval: propTimeInterval,
   onDragNearEdge,
+  onEventUpdate,
 }) => {
   // Initialize logger
   const logger = useLogger('TimeGrid');
@@ -90,25 +93,14 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
   // IMPORTANTE: Declarar TODOS los estados al inicio del componente
   const [gridWidth, setGridWidth] = useState(SCREEN_WIDTH - TIME_LABEL_WIDTH);
-  const [isResizingEvent, setIsResizingEvent] = useState(false);
   const [newEventCoords, setNewEventCoords] = useState<{
     startY: number;
     currentY: number;
     dayIndex: number;
     isCreating: boolean;
   } | null>(null);
-  const [dragTarget, setDragTarget] = useState<{
-    dayIndex: number;
-    hour: number;
-    minute: number;
-  } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
-  const [autoScrolling, setAutoScrolling] = useState({
-    active: false,
-    direction: null as 'up' | 'down' | null,
-    speed: 0,
-  });
 
   // Create a ref to track auto-scrolling state for immediate access in animations
   const autoScrollingRef = useRef({
@@ -289,301 +281,15 @@ const TimeGrid: React.FC<TimeGridProps> = ({
   // Función para validar si un evento puede ser arrastrado a una posición específica
   const handleEventDrag = useCallback(
     (event: CalendarEvent, minuteDiff: number, snapTime?: Date): boolean => {
-      // Marcar que el usuario ha interactuado con el scroll
-      userHasScrolled.current = true;
-
-      // Implementación actual...
-      // Calcular nuevas fechas
-      const newStart = new Date(event.start);
-      newStart.setMinutes(newStart.getMinutes() + minuteDiff);
-
-      const newEnd = new Date(event.end);
-      newEnd.setMinutes(newEnd.getMinutes() + minuteDiff);
-
-      logger.debug('Validando arrastre de evento', {
-        eventId: event.id,
-        eventTitle: event.title,
-        originalStart: event.start.toLocaleTimeString(),
-        newStart: newStart.toLocaleTimeString(),
-        minuteDiff,
-        hasUnavailableHours: !!unavailableHours,
-      });
-
-      // Update snap line indicator if a snap time is provided
-      if (snapTime && effectiveSnapLineIndicator) {
-        setLocalSnapLineIndicator({
-          time: snapTime,
-          visible: true,
-          color: theme.successColor || '#4CAF50',
-        });
-      }
-
-      // Verificar si el destino es válido
-      if (unavailableHours) {
-        // Obtener día de la semana
-        const dayOfWeek = newStart.getDay();
-
-        // Verificar si este día está incluido en días no disponibles
-        const daysToCheck = unavailableHours.days || [0, 1, 2, 3, 4, 5, 6];
-        if (daysToCheck.includes(dayOfWeek)) {
-          // Verificar si la hora cae dentro de algún rango no disponible
-          const timeValue = newStart.getHours() + newStart.getMinutes() / 60;
-
-          logger.debug('Verificando restricciones horarias', {
-            eventId: event.id,
-            dayOfWeek,
-            timeValue,
-            day: ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][
-              dayOfWeek
-            ],
-            unavailableRanges: unavailableHours.ranges,
-          });
-
-          const isUnavailable = unavailableHours.ranges.some(
-            range => timeValue >= range.start && timeValue < range.end
-          );
-
-          if (isUnavailable) {
-            logger.debug('Arrastre bloqueado por horario no disponible', {
-              eventId: event.id,
-              dayOfWeek,
-              timeValue,
-              day: ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][
-                dayOfWeek
-              ],
-              newStart: newStart.toLocaleTimeString(),
-              minuteDiff,
-            });
-            return false; // No permitir arrastrar a esta zona
-          }
-        }
-      }
-
-      logger.debug('Arrastre de evento permitido', {
-        eventId: event.id,
-        newStart: newStart.toLocaleTimeString(),
-        newEnd: newEnd.toLocaleTimeString(),
-        minuteDiff,
-      });
-
-      return true; // Permitir arrastrar
+      // Implementación simplificada - siempre permitir por ahora
+      return true;
     },
-    [unavailableHours, theme.successColor, logger, effectiveSnapLineIndicator]
+    []
   );
 
   const handleEventDragEnd = useCallback(() => {
-    // Force immediate auto-scroll stop regardless of current state
-    logger.debug('✋ DRAG ENDED: Stopping auto-scroll immediately', {
-      wasActive: autoScrollingRef.current.active,
-      direction: autoScrollingRef.current.direction,
-      finalScrollPosition: scrollPosition.y.toFixed(1),
-      viewType,
-    });
-
-    // Update both state and ref for immediate effect
-    const newScrollState = {
-      active: false,
-      direction: null,
-      speed: 0,
-    };
-
-    // Registrar el tiempo en que se detuvo el auto-scroll para el período de enfriamiento
-    lastAutoScrollEndRef.current = Date.now();
-
-    // Update ref immediately for animation frame checks
-    autoScrollingRef.current = newScrollState;
-
-    // Update state for component re-renders - usando objeto nuevo para forzar actualización
-    setAutoScrolling({ ...newScrollState });
-
-    // Intento agresivo de detener cualquier animación
-    try {
-      // Cancelar cualquier frame de animación pendiente
-      if (typeof window !== 'undefined' && window.cancelAnimationFrame) {
-        // Esta es una manera general de intentar detener cualquier animación
-        for (let i = 0; i < 10; i++) {
-          window.cancelAnimationFrame(i);
-        }
-      }
-    } catch (e) {
-      logger.debug('Error cancelando animaciones', { error: e });
-    }
-
-    // Ocultar la línea de snap cuando termina el arrastre
-    if (localSnapLineIndicator) {
-      setLocalSnapLineIndicator(null);
-    }
-
-    // Usamos onDragEnd en lugar de intentar modificar snapLineIndicator directamente
-    if (onDragEnd) {
-      onDragEnd();
-    }
-  }, [autoScrolling, scrollPosition.y, onDragEnd, viewType, logger, localSnapLineIndicator]);
-
-  // Función mejorada para handleDragNearEdge con mejor detección bidireccional
-  const handleDragNearEdge = useCallback(
-    (distanceFromEdge: number, direction: 'up' | 'down') => {
-      try {
-        // Marcar que el usuario ha interactuado con el scroll
-        userHasScrolled.current = true;
-
-        // Safety check for day view
-        if (viewType === 'day' && (!dates || dates.length === 0)) {
-          logger.warn('⚠️ DAY VIEW DRAG ISSUE: No dates available', {
-            viewType,
-          });
-          return;
-        }
-
-        // Prevenir iniciar un nuevo auto-scroll demasiado rápido después de detener uno
-        const now = Date.now();
-        const COOLDOWN_PERIOD = 300; // ms
-        if (now - lastAutoScrollEndRef.current < COOLDOWN_PERIOD) {
-          logger.debug('Auto-scroll prevented during cooldown period', {
-            timeSinceLastStop: now - lastAutoScrollEndRef.current,
-            cooldownPeriod: COOLDOWN_PERIOD,
-            direction,
-          });
-          return;
-        }
-
-        // Obtener configuración de auto-scroll desde calendarConfig o usar valores por defecto
-        const autoScrollConfig = calendarConfig?.autoScrollConfig || {
-          enabled: true,
-          edgeThreshold: 80,
-          safeAreaSize: 150,
-          speed: 4,
-          constant: false,
-          acceleration: 0.3,
-          maxSpeed: 10,
-          minSpeed: 2,
-          frameInterval: 16,
-        };
-
-        // Verificar si el auto-scroll está habilitado
-        if (!autoScrollConfig.enabled) {
-          return;
-        }
-
-        // Obtener parámetros de configuración
-        const edgeThreshold = autoScrollConfig.edgeThreshold;
-        const safeAreaSize = autoScrollConfig.safeAreaSize;
-
-        // Verificar si estamos en la zona segura (área central donde no se activa el auto-scroll)
-        if (
-          safeAreaSize > 0 &&
-          distanceFromEdge > edgeThreshold &&
-          distanceFromEdge < safeAreaSize
-        ) {
-          if (autoScrolling.active) {
-            logger.debug('🛑 IN SAFE AREA: Stopping auto-scroll', {
-              distanceFromEdge,
-              direction,
-              safeAreaSize,
-              viewType,
-            });
-
-            // Detener el auto-scroll
-            const newScrollState = {
-              active: false,
-              direction: null,
-              speed: 0,
-            };
-
-            autoScrollingRef.current = newScrollState;
-            setAutoScrolling(newScrollState);
-          }
-          return;
-        }
-
-        // Solo activar scroll si estamos dentro del umbral
-        if (distanceFromEdge > edgeThreshold) {
-          if (autoScrolling.active) {
-            logger.debug('👋 EDGE DETECTION: Too far from edge, stopping auto-scroll', {
-              distanceFromEdge,
-              direction,
-              threshold: edgeThreshold,
-              viewType,
-            });
-
-            // Detener el auto-scroll
-            const newScrollState = {
-              active: false,
-              direction: null,
-              speed: 0,
-            };
-
-            autoScrollingRef.current = newScrollState;
-            setAutoScrolling(newScrollState);
-          }
-          return;
-        }
-
-        // Calcular la velocidad del scroll según la configuración y la dirección
-        let scrollSpeed;
-
-        if (autoScrollConfig.constant) {
-          // Usar velocidad constante
-          scrollSpeed = autoScrollConfig.speed;
-        } else {
-          // Calcular velocidad basada en la distancia del borde
-          // Normalize distance (0 = at edge, 1 = at threshold)
-          const normalizedDistance = Math.min(1, distanceFromEdge / edgeThreshold);
-
-          // Apply acceleration curve - cuanto más cerca del borde, más rápido
-          scrollSpeed =
-            autoScrollConfig.maxSpeed * (1 - normalizedDistance) ** autoScrollConfig.acceleration;
-
-          // Ensure minimum speed
-          scrollSpeed = Math.max(autoScrollConfig.minSpeed, scrollSpeed);
-
-          // Round to 1 decimal place for smoother transitions
-          scrollSpeed = Math.round(scrollSpeed * 10) / 10;
-        }
-
-        // Asegurar que la dirección sea correcta según qué borde estamos cerca
-        // Esto garantiza que el scroll siempre va en la dirección esperada
-        // CLAVE: Aquí respetamos la dirección proporcionada por Event.tsx
-
-        // Activar el auto-scroll con la dirección y velocidad calculadas
-        const newScrollState = {
-          active: true,
-          direction: direction, // Usar exactamente la dirección proporcionada
-          speed: scrollSpeed,
-        };
-
-        autoScrollingRef.current = newScrollState;
-        setAutoScrolling(newScrollState);
-
-        // Log más claro y específico de cada dirección
-        if (direction === 'up') {
-          logger.debug('⬆️ SCROLL UP ACTIVATED:', {
-            direction: 'UP',
-            distanceFromEdge: distanceFromEdge.toFixed(1),
-            scrollSpeed: scrollSpeed.toFixed(1),
-            scrollPosition: scrollPosition.y.toFixed(1),
-            isConstantSpeed: autoScrollConfig.constant,
-          });
-        } else {
-          logger.debug('⬇️ SCROLL DOWN ACTIVATED:', {
-            direction: 'DOWN',
-            distanceFromEdge: distanceFromEdge.toFixed(1),
-            scrollSpeed: scrollSpeed.toFixed(1),
-            scrollPosition: scrollPosition.y.toFixed(1),
-            isConstantSpeed: autoScrollConfig.constant,
-          });
-        }
-      } catch (error: any) {
-        logger.error('❌ EDGE DETECTION ERROR', {
-          error: error.message,
-          viewType,
-          direction,
-          distanceFromEdge,
-        });
-      }
-    },
-    [scrollPosition.y, viewType, dates, calendarConfig, autoScrolling.active, logger]
-  );
+    logger.debug('Drag ended');
+  }, [logger]);
 
   // Función para crear un evento usando arrastre
   const createEventWithDrag = useCallback(
@@ -693,7 +399,7 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     let frameCount = 0;
     let isMounted = true; // Track if component is still mounted
 
-    // Use requestAnimationFrame for smoother scrolling
+    // Use requestAnimationFrame for smoother scrolling with error handling
     const scrollFrame = (timestamp: number) => {
       try {
         // Check if component is still mounted
@@ -815,8 +521,22 @@ const TimeGrid: React.FC<TimeGridProps> = ({
         // Only update if position changed and scroll function exists
         if (Math.abs(newY - currentY) > 0.1 && typeof scrollTo === 'function') {
           try {
-            // Use animated: false for smoother continuous scrolling
-            scrollTo({ y: newY, animated: false });
+            // Uso de un try-catch adicional para evitar errores de scroll
+            try {
+              // Use animated: false for smoother continuous scrolling
+              scrollTo({ y: newY, animated: false });
+            } catch (scrollError) {
+              logger.error('Scroll error, trying fallback', { error: String(scrollError) });
+
+              // Intento alternativo con requestAnimationFrame
+              requestAnimationFrame(() => {
+                try {
+                  scrollTo({ y: newY, animated: false });
+                } catch (ignoreError) {
+                  // Ignorar error en el intento alternativo
+                }
+              });
+            }
           } catch (scrollError: any) {
             logger.error('Error during scroll', {
               error: scrollError.message,
@@ -1583,89 +1303,74 @@ const TimeGrid: React.FC<TimeGridProps> = ({
     );
   };
 
-  // Update renderEvents to use the memoized function
+  // Update renderEvents to use the memoized function and handle errors properly
   const renderEvents = useCallback(
     (dayIndex: number) => {
-      // Filtrar eventos para este día
-      const date = dates[dayIndex];
-      const allEvents = filterEventsByDay(events, date);
+      try {
+        // Filtrar eventos para este día
+        const date = dates[dayIndex];
+        if (!date) {
+          logger.warn(`Invalid date at index ${dayIndex}`);
+          return null;
+        }
 
-      // Log only basic info to reduce overhead
-      logger.debug(`Rendering events for day ${dayIndex}`, {
-        date: date.toISOString(),
-        eventCount: allEvents.length,
-      });
+        const allEvents = filterEventsByDay(events, date);
 
-      if (allEvents.length === 0) return null;
+        // Log only basic info to reduce overhead
+        logger.debug(`Rendering events for day ${dayIndex}`, {
+          date: date.toISOString(),
+          eventCount: allEvents.length,
+        });
 
-      // Calcular posición y dimensiones para cada evento
-      const positionedEvents = positionEventsWithOverlap(allEvents);
+        if (allEvents.length === 0) return null;
 
-      // Reduce logging detail level
-      if (positionedEvents.length > 0) {
-        logger.debug(`Positioned ${positionedEvents.length} events for day ${dayIndex}`);
-      }
+        // Calcular posición y dimensiones para cada evento
+        const positionedEvents = positionEventsWithOverlap(allEvents);
 
-      return (
-        <>
-          {positionedEvents.map((item: CalendarEvent & { left: number; width: number }) => {
-            // Use the memoized position calculation function
-            const { top, height } = getMemoizedEventPosition(
-              item,
-              timeRange.start,
-              timeRange.end,
-              HOUR_HEIGHT * zoomLevel
-            );
+        // Reduce logging detail level
+        if (positionedEvents.length > 0) {
+          logger.debug(`Positioned ${positionedEvents.length} events for day ${dayIndex}`);
+        }
 
-            // Significantly reduce per-event logging
-            // Only log on every 5th event to reduce overhead
-            if (Math.random() < 0.2) {
-              logger.debug(`Event position: ${item.id}`, {
-                title: item.title,
-                top,
-                height,
-              });
-            }
+        return (
+          <>
+            {positionedEvents.map((item: CalendarEvent & { left: number; width: number }) => {
+              try {
+                // Use the memoized position calculation function
+                const { top, height } = getMemoizedEventPosition(
+                  item,
+                  timeRange.start,
+                  timeRange.end,
+                  HOUR_HEIGHT * zoomLevel
+                );
 
-            // Add a function to handle event drag with snap time
-            const handleEventDragWithSnap = (
-              event: CalendarEvent,
-              minuteDiff: number,
-              snapTime: Date
-            ): boolean => {
-              // Call the provided onEventDrag handler with the snap time
-              if (onEventDrag) {
-                return onEventDrag(event, minuteDiff, snapTime);
+                // Use a stable key that doesn't depend on refreshKey if possible
+                const eventKey = `${item.id}-${item.start.getTime()}-${item.end.getTime()}`;
+
+                return (
+                  <DraggableEvent
+                    key={eventKey}
+                    event={item}
+                    top={top}
+                    left={item.left}
+                    width={item.width}
+                    height={height}
+                    columnWidth={columnWidth}
+                    dayIndex={dayIndex}
+                    onEventUpdate={onEventUpdate}
+                  />
+                );
+              } catch (error) {
+                logger.error(`Error rendering event ${item.id}:`, error);
+                return null; // Skip this event if there's an error
               }
-              return true;
-            };
-
-            // Use a stable key that doesn't depend on refreshKey if possible
-            const eventKey = `${item.id}-${item.start.getTime()}-${item.end.getTime()}`;
-
-            return (
-              <Event
-                key={eventKey}
-                event={item}
-                top={top}
-                left={item.left}
-                width={item.width}
-                height={height}
-                isResizing={isResizingEvent}
-                setIsResizing={setIsResizingEvent}
-                onEventDragWithSnap={handleEventDragWithSnap}
-                onEventDragEnd={handleEventDragEnd}
-                onDragNearEdge={handleDragNearEdge}
-                viewHeight={scrollViewHeight}
-                scrollPosition={scrollPosition}
-                columnWidth={columnWidth}
-                dayIndex={dayIndex}
-                dates={dates}
-              />
-            );
-          })}
-        </>
-      );
+            })}
+          </>
+        );
+      } catch (error) {
+        logger.error(`Error in renderEvents for day ${dayIndex}:`, error);
+        return null;
+      }
     },
     [
       dates,
@@ -1688,68 +1393,66 @@ const TimeGrid: React.FC<TimeGridProps> = ({
 
   // Main render
   return (
-    <GestureDetector gesture={createEventGesture}>
-      <View style={styles.container}>
-        <ScrollView
-          {...scrollProps}
-          style={styles.scrollView}
-          contentContainerStyle={[
-            styles.scrollViewContent,
-            {
-              height: hours.length * HOUR_HEIGHT * zoomLevel,
-              minHeight: '100%',
-            },
-          ]}
-          onLayout={handleScrollViewLayout}
-          onScrollBeginDrag={handleUserScroll}
-          onScrollEndDrag={() => {
-            // Ayuda a mantener el rastreo de la posición actual de desplazamiento
-            logger.debug('Scroll end drag');
-          }}
-          directionalLockEnabled={true} // Bloquear a scroll vertical
-          showsVerticalScrollIndicator={true}
-          scrollEnabled={true} // Aseguramos que el scroll esté habilitado
-        >
-          <View style={styles.timeGrid}>
-            {/* Time labels */}
-            {renderTimeLabels()}
+    <View style={styles.container}>
+      <ScrollView
+        {...scrollProps}
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollViewContent,
+          {
+            height: hours.length * HOUR_HEIGHT * zoomLevel,
+            minHeight: '100%',
+          },
+        ]}
+        onLayout={handleScrollViewLayout}
+        onScrollBeginDrag={handleUserScroll}
+        onScrollEndDrag={() => {
+          // Ayuda a mantener el rastreo de la posición actual de desplazamiento
+          logger.debug('Scroll end drag');
+        }}
+        directionalLockEnabled={true} // Bloquear a scroll vertical
+        showsVerticalScrollIndicator={true}
+        scrollEnabled={true} // Aseguramos que el scroll esté habilitado
+      >
+        <View style={styles.timeGrid}>
+          {/* Time labels */}
+          {renderTimeLabels()}
 
-            {/* Grid container for time slots and events */}
-            <View style={styles.gridContainer} onLayout={onGridLayout}>
-              {/* Background grid lines */}
-              {renderGridLines()}
+          {/* Grid container for time slots and events */}
+          <View style={styles.gridContainer} onLayout={onGridLayout}>
+            {/* Background grid lines */}
+            {renderGridLines()}
 
-              {/* Time slots */}
-              {renderTimeSlots()}
+            {/* Time slots */}
+            {renderTimeSlots()}
 
-              {/* Now indicator */}
-              {renderNowIndicator()}
+            {/* Now indicator */}
+            {renderNowIndicator()}
 
-              {/* New event creation indicator */}
-              {newEventCoords && (
-                <Animated.View
-                  style={[
-                    styles.newEventIndicator,
-                    {
-                      top: Math.min(newEventCoords.startY, newEventCoords.currentY),
-                      height: Math.abs(newEventCoords.currentY - newEventCoords.startY),
-                      left: newEventCoords.dayIndex * columnWidth,
-                      width: columnWidth,
-                      backgroundColor: theme.dragCreateIndicatorColor,
-                      borderColor: theme.primaryColor,
-                      opacity: createEventOpacity,
-                    },
-                  ]}
-                />
-              )}
+            {/* New event creation indicator */}
+            {newEventCoords && (
+              <Animated.View
+                style={[
+                  styles.newEventIndicator,
+                  {
+                    top: Math.min(newEventCoords.startY, newEventCoords.currentY),
+                    height: Math.abs(newEventCoords.currentY - newEventCoords.startY),
+                    left: newEventCoords.dayIndex * columnWidth,
+                    width: columnWidth,
+                    backgroundColor: theme.dragCreateIndicatorColor,
+                    borderColor: theme.primaryColor,
+                    opacity: createEventOpacity,
+                  },
+                ]}
+              />
+            )}
 
-              {/* Snap line indicator */}
-              {renderSnapLineIndicator()}
-            </View>
+            {/* Snap line indicator */}
+            {renderSnapLineIndicator()}
           </View>
-        </ScrollView>
-      </View>
-    </GestureDetector>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 

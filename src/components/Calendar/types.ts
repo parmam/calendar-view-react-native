@@ -119,6 +119,7 @@ export type CalendarContextType = {
   zoomLevel: number;
   isDragEnabled: boolean;
   timeChangeConfirmation: TimeChangeConfirmation;
+  hourHeight: number;
   onEventPress?: (event: CalendarEvent) => void;
   onTimeSlotPress?: (start: Date, end: Date) => void;
   onEventCreate?: (event: CalendarEvent) => void;

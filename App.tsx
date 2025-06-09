@@ -398,17 +398,25 @@ const AppContent = () => {
   });
 
   const logger = useLogger('AppContent');
-
-  // Configuración inicial: deshabilitar logs en producción
   const { updatePerformanceConfig } = useCalendarConfig();
+  const { loggingEnabled, enableLogging } = useLoggingControl();
 
-  // Ejemplo: Para deshabilitar logs de forma programática, descomentar estas líneas:
-  // useEffect(() => {
-  //   updatePerformanceConfig({
-  //     LOGGING_ENABLED: false,
-  //     LOGGING_LEVEL: "error" // Solo mostrar errores si está habilitado
-  //   });
-  // }, []);
+  // Enable logging to debug drag and drop issues
+  useEffect(() => {
+    // Always enable logging for debugging
+    if (!loggingEnabled) {
+      enableLogging();
+      logger.debug('Logging enabled for debugging drag and drop issues');
+    }
+
+    // Configure performance settings for detailed logs
+    updatePerformanceConfig({
+      LOGGING_ENABLED: true,
+      LOGGING_LEVEL: 'debug', // Show all log levels for debugging
+    });
+
+    logger.debug('Performance config updated for debugging');
+  }, [loggingEnabled, enableLogging, updatePerformanceConfig]);
 
   // Manejar cambios en la configuración
   const handleConfigChange = (newConfig: any) => {
@@ -565,12 +573,8 @@ const AppContent = () => {
           />
         </View>
 
-        {/* Debug Controls
-        <DebugControls
-          calendarConfig={calendarConfig}
-          onConfigChange={handleConfigChange}
-        />
-        */}
+        {/* Debug Controls */}
+        <DebugControls calendarConfig={calendarConfig} onConfigChange={handleConfigChange} />
         <StatusBar style="auto" />
       </SafeAreaView>
     </GestureHandlerRootView>

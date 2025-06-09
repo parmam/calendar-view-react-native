@@ -32,25 +32,57 @@ const LoggingContext = createContext<LoggingContextType>({
 // Provider component to wrap the app
 export const LoggingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Get initial state from logger
-  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(logger.isEnabled());
+  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(true);
+
+  // Initialize logging based on environment
+  useEffect(() => {
+    try {
+      // In development, always enable logs
+      if (__DEV__) {
+        logger.enable();
+        setLoggingEnabled(true);
+        console.log('Logging enabled in development mode');
+      } else {
+        // In production, disable verbose logs
+        logger.configure({ minLevel: 'warn' });
+      }
+    } catch (error) {
+      console.error('Error initializing logging:', error);
+    }
+  }, []);
 
   // Enable logging
   const enableLogging = useCallback(() => {
-    logger.enable();
-    setLoggingEnabled(true);
+    try {
+      logger.enable();
+      setLoggingEnabled(true);
+      console.log('Logging enabled');
+    } catch (error) {
+      console.error('Error enabling logging:', error);
+    }
   }, []);
 
   // Disable logging
   const disableLogging = useCallback(() => {
-    logger.disable();
-    setLoggingEnabled(false);
+    try {
+      logger.disable();
+      setLoggingEnabled(false);
+      console.log('Logging disabled');
+    } catch (error) {
+      console.error('Error disabling logging:', error);
+    }
   }, []);
 
   // Configure logger
   const configureLogging = useCallback((config: Partial<LoggerConfig>) => {
-    logger.configure(config);
-    if (config.enabled !== undefined) {
-      setLoggingEnabled(config.enabled);
+    try {
+      logger.configure(config);
+      if (config.enabled !== undefined) {
+        setLoggingEnabled(config.enabled);
+      }
+      console.log('Logging configured:', config);
+    } catch (error) {
+      console.error('Error configuring logging:', error);
     }
   }, []);
 

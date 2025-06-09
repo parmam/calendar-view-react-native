@@ -18,7 +18,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { CalendarProvider, useCalendar } from './CalendarContext';
 import CalendarHeader from './CalendarHeader';
-import TimeGrid from './TimeGrid';
+import SimpleTimeGrid from './SimpleTimeGrid';
 import MonthView from './MonthView';
 import { useLogger } from './utils/logger';
 import {
@@ -138,18 +138,20 @@ const CalendarContent: React.FC = () => {
       case 'day':
         newDate = subtractDays(selectedDate, 1);
         break;
-      case '3day':
+      case '3day': {
         newDate = subtractDays(selectedDate, 3);
         break;
+      }
       case 'week':
       case 'workWeek':
         newDate = subtractDays(selectedDate, 7);
         break;
-      case 'month':
+      case 'month': {
         const month = selectedDate.getMonth();
         newDate = new Date(selectedDate);
         newDate.setMonth(month - 1);
         break;
+      }
       default:
         newDate = subtractDays(selectedDate, 1);
     }
@@ -175,18 +177,20 @@ const CalendarContent: React.FC = () => {
       case 'day':
         newDate = addDays(selectedDate, 1);
         break;
-      case '3day':
+      case '3day': {
         newDate = addDays(selectedDate, 3);
         break;
+      }
       case 'week':
       case 'workWeek':
         newDate = addDays(selectedDate, 7);
         break;
-      case 'month':
+      case 'month': {
         const month = selectedDate.getMonth();
         newDate = new Date(selectedDate);
         newDate.setMonth(month + 1);
         break;
+      }
       default:
         newDate = addDays(selectedDate, 1);
     }
@@ -513,29 +517,11 @@ const CalendarContent: React.FC = () => {
       case '3day':
       case 'week':
       case 'workWeek':
-        return (
-          <TimeGrid
-            viewType={viewType}
-            panHandlers={isDragEnabled ? panResponder.panHandlers : undefined}
-            onEventDrag={handleEventDrag}
-            onDragEnd={handleDragEnd}
-            snapLineIndicator={snapLineIndicator}
-            timeInterval={timeInterval}
-          />
-        );
+        return <SimpleTimeGrid viewType={viewType} onEventUpdate={onEventUpdate} />;
       case 'month':
         return <MonthView />;
       default:
-        return (
-          <TimeGrid
-            viewType={viewType}
-            panHandlers={isDragEnabled ? panResponder.panHandlers : undefined}
-            onEventDrag={handleEventDrag}
-            onDragEnd={handleDragEnd}
-            snapLineIndicator={snapLineIndicator}
-            timeInterval={timeInterval}
-          />
-        );
+        return <SimpleTimeGrid viewType={viewType} onEventUpdate={onEventUpdate} />;
     }
   };
 
@@ -548,9 +534,7 @@ const CalendarContent: React.FC = () => {
         onViewTypeChange={handleViewTypeChange}
       />
 
-      <GestureDetector gesture={pinchGesture}>
-        <View style={styles.contentContainer}>{renderContent()}</View>
-      </GestureDetector>
+      <View style={styles.contentContainer}>{renderContent()}</View>
 
       {/* Time change confirmation modal */}
       <TimeChangeConfirmationModal />

@@ -11,6 +11,7 @@ import {
   DragPreviewConfig,
   TimeChangeConfirmation,
 } from './types';
+import { LAYOUT_CONFIG } from './config/calendarConfig';
 
 // Default theme
 export const defaultTheme: CalendarTheme = {
@@ -86,6 +87,7 @@ const CalendarContext = createContext<CalendarContextType>({
   zoomLevel: 1,
   isDragEnabled: true,
   timeChangeConfirmation: defaultTimeChangeConfirmation,
+  hourHeight: LAYOUT_CONFIG.HOUR_HEIGHT,
   setViewType: () => {},
   setSelectedDate: () => {},
   setZoomLevel: () => {},
@@ -279,6 +281,7 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
     zoomLevel,
     isDragEnabled,
     timeChangeConfirmation,
+    hourHeight: LAYOUT_CONFIG.HOUR_HEIGHT,
     onEventPress,
     onTimeSlotPress,
     onEventCreate: handleEventCreate,

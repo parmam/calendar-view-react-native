@@ -46,208 +46,229 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { PERFORMANCE_CONFIG } from '../config/calendarConfig';
+import Constants from 'expo-constants';
 
-// Log levels
+// Default log level configuration
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-// Configuration for the logger
+const LOG_LEVELS: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
+
+// Basic configuration for logger
 export interface LoggerConfig {
   enabled: boolean;
   minLevel: LogLevel;
   prefix?: string;
 }
 
-// Configuración inicial por defecto - reducir verbosidad
-const initialConfig: LoggerConfig = {
-  enabled: process.env.NODE_ENV === 'development',
-  minLevel: process.env.NODE_ENV === 'development' ? 'warn' : 'error',
+// Default config
+const DEFAULT_CONFIG: LoggerConfig = {
+  enabled: __DEV__, // Enable logs only in development by default
+  minLevel: 'debug',
   prefix: '[Calendar]',
 };
 
-// Global logger state
-let globalEnabled = initialConfig.enabled;
+// Global config that can be updated
+let globalConfig: LoggerConfig = { ...DEFAULT_CONFIG };
+
+// Get app version (if available)
+const APP_VERSION = Constants.expoConfig?.version || '0.0.0';
 
 // Format timestamp
 const getTimestamp = () => {
-  const now = new Date();
-  return `${now.getHours().toString().padStart(2, '0')}:${now
-    .getMinutes()
-    .toString()
-    .padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now
-    .getMilliseconds()
-    .toString()
-    .padStart(3, '0')}`;
+  try {
+    const now = new Date();
+    return now.toISOString().split('T')[1].substring(0, 8);
+  } catch (error) {
+    return '00:00:00';
+  }
 };
 
-// Logger utility class
+/**
+ * Simple logger class with error handling
+ */
 class Logger {
   private config: LoggerConfig;
+  private componentName: string;
 
-  constructor(config: Partial<LoggerConfig> = {}) {
-    this.config = { ...initialConfig, ...config };
-
-    // Desactivar logs verbosos en producción por defecto
-    if (process.env.NODE_ENV === 'production') {
-      this.config.minLevel = 'error';
-    }
+  constructor(componentName: string, config: Partial<LoggerConfig> = {}) {
+    this.componentName = componentName;
+    this.config = {
+      ...globalConfig,
+      ...config,
+    };
   }
 
-  // Configure the logger
+  // Allow runtime configuration changes
   configure(config: Partial<LoggerConfig>): void {
-    this.config = { ...this.config, ...config };
-    if (config.enabled !== undefined) {
-      globalEnabled = config.enabled;
+    try {
+      this.config = {
+        ...this.config,
+        ...config,
+      };
+    } catch (error) {
+      console.error('Error configuring logger:', error);
     }
   }
 
   // Enable logging
   enable(): void {
-    this.config.enabled = true;
-    globalEnabled = true;
+    try {
+      this.config.enabled = true;
+    } catch (error) {
+      console.error('Error enabling logger:', error);
+    }
   }
 
   // Disable logging
   disable(): void {
-    this.config.enabled = false;
-    globalEnabled = false;
+    try {
+      this.config.enabled = false;
+    } catch (error) {
+      console.error('Error disabling logger:', error);
+    }
   }
 
   // Check if logging is enabled
   isEnabled(): boolean {
-    return this.config.enabled && globalEnabled;
+    try {
+      return this.config.enabled;
+    } catch (error) {
+      console.error('Error checking if logger is enabled:', error);
+      return false;
+    }
   }
 
   // Log methods
   debug(message: string, ...args: any[]): void {
-    this.log('debug', message, ...args);
+    try {
+      this.log('debug', message, ...args);
+    } catch (error) {
+      console.error('Error in debug log:', error);
+    }
   }
 
   info(message: string, ...args: any[]): void {
-    this.log('info', message, ...args);
+    try {
+      this.log('info', message, ...args);
+    } catch (error) {
+      console.error('Error in info log:', error);
+    }
   }
 
   warn(message: string, ...args: any[]): void {
-    this.log('warn', message, ...args);
+    try {
+      this.log('warn', message, ...args);
+    } catch (error) {
+      console.error('Error in warn log:', error);
+    }
   }
 
   error(message: string, ...args: any[]): void {
-    this.log('error', message, ...args);
+    try {
+      this.log('error', message, ...args);
+    } catch (error) {
+      console.error('Error in error log:', error);
+    }
   }
 
-  // Internal log method
+  // Core logging function with error handling
   private log(level: LogLevel, message: string, ...args: any[]): void {
-    // Skip logging if disabled or below minimum level
-    if (!this.config.enabled) return;
+    try {
+      // Only log if enabled and level is high enough
+      if (!this.config.enabled || LOG_LEVELS[level] < LOG_LEVELS[this.config.minLevel]) {
+        return;
+      }
 
-    const levelPriority = {
-      debug: 0,
-      info: 1,
-      warn: 2,
-      error: 3,
-    };
+      // Format log prefix
+      const prefix = `${this.config.prefix || ''}[${this.componentName}]`;
+      const timestamp = getTimestamp();
+      const formattedMessage = `${timestamp} ${prefix} ${message}`;
 
-    if (levelPriority[level] < levelPriority[this.config.minLevel]) {
-      return;
-    }
+      // Simple implementation that directly uses console
+      // This avoids complex formatting that could cause issues
+      switch (level) {
+        case 'debug':
+          console.log(formattedMessage, ...args);
+          break;
+        case 'info':
+          console.info(formattedMessage, ...args);
+          break;
+        case 'warn':
+          console.warn(formattedMessage, ...args);
+          break;
+        case 'error':
+          console.error(formattedMessage, ...args);
+          break;
+      }
+    } catch (error) {
+      // Last resort fallback if something goes wrong in the logging itself
+      console.error('Critical error in logger:', error);
 
-    // Skip expensive operations for debug logs when dragging
-    if (level === 'debug' && message.includes('drag')) {
-      if (Math.random() > 0.05) return; // Solo mostrar 5% de logs de arrastre
-    }
-
-    // Simple console output with minimal processing
-    const prefix = this.config.prefix ? `${this.config.prefix} ` : '';
-    const timestamp = getTimestamp();
-
-    switch (level) {
-      case 'debug':
-        console.debug(`${timestamp} ${prefix}${message}`, ...args);
-        break;
-      case 'info':
-        console.info(`${timestamp} ${prefix}${message}`, ...args);
-        break;
-      case 'warn':
-        console.warn(`${timestamp} ${prefix}${message}`, ...args);
-        break;
-      case 'error':
-        console.error(`${timestamp} ${prefix}${message}`, ...args);
-        break;
+      // Try a very simple console.log as fallback
+      try {
+        console.log(`FALLBACK LOG (${level}): ${message}`);
+      } catch {
+        // Nothing else we can do
+      }
     }
   }
 }
 
-// Create a singleton instance
-const globalLogger = new Logger();
-
-/**
- * Actualiza la configuración del logger basada en los cambios de PERFORMANCE_CONFIG
- *
- * Esta función debe ser llamada cuando se actualizan las configuraciones
- * de rendimiento para asegurar que los cambios en la configuración de logging
- * se reflejen en el comportamiento del logger.
- */
-export const updateLoggerFromConfig = () => {
-  globalLogger.configure({
-    enabled: PERFORMANCE_CONFIG.LOGGING_ENABLED,
-    minLevel: PERFORMANCE_CONFIG.LOGGING_LEVEL as LogLevel,
-  });
-};
-
-// React hook for using the logger in components
-export const useLogger = (componentName: string) => {
-  const formatMessage = (level: string, message: string) => {
-    return `[${componentName}] ${message}`;
-  };
-
-  return {
-    debug: (message: string, data?: any) => {
-      globalLogger.debug(formatMessage('debug', message), data);
-    },
-    info: (message: string, data?: any) => {
-      globalLogger.info(formatMessage('info', message), data);
-    },
-    warn: (message: string, data?: any) => {
-      globalLogger.warn(formatMessage('warn', message), data);
-    },
-    error: (message: string, data?: any) => {
-      globalLogger.error(formatMessage('error', message), data);
-    },
-  };
-};
-
-// Hook to control logging in components with minimum re-renders
-export const useLoggingControl = () => {
-  // Track logging state
-  const [loggingEnabled, setLoggingEnabled] = useState<boolean>(globalEnabled);
-
-  // Update state when global state changes
-  useEffect(() => {
-    setLoggingEnabled(globalEnabled);
-  }, []);
-
-  const enableLogging = useCallback(() => {
-    globalLogger.enable();
-    setLoggingEnabled(true);
-  }, []);
-
-  const disableLogging = useCallback(() => {
-    globalLogger.disable();
-    setLoggingEnabled(false);
-  }, []);
-
-  const configureLogging = useCallback((config: Partial<LoggerConfig>) => {
-    globalLogger.configure(config);
-    if (config.enabled !== undefined) {
-      setLoggingEnabled(config.enabled);
+// Update global logger config from performance config
+export const updateLoggerFromConfig = (config?: Partial<LoggerConfig>): void => {
+  try {
+    if (config) {
+      globalConfig = { ...globalConfig, ...config };
     }
-  }, []);
-
-  return {
-    loggingEnabled,
-    enableLogging,
-    disableLogging,
-    configureLogging,
-  };
+  } catch (error) {
+    console.error('Error updating logger config:', error);
+  }
 };
 
-export default globalLogger;
+// Define a minimal logger interface
+interface MinimalLogger {
+  debug: (message: string, ...args: any[]) => void;
+  info: (message: string, ...args: any[]) => void;
+  warn: (message: string, ...args: any[]) => void;
+  error: (message: string, ...args: any[]) => void;
+  configure: (config: Partial<LoggerConfig>) => void;
+  enable: () => void;
+  disable: () => void;
+  isEnabled: () => boolean;
+}
+
+// Create a component-specific logger
+export const useLogger = (componentName: string): MinimalLogger => {
+  try {
+    return new Logger(componentName);
+  } catch (error) {
+    console.error('Error creating logger:', error);
+
+    // Return a minimal fallback logger that won't crash
+    return {
+      debug: (message: string) => console.log(message),
+      info: (message: string) => console.info(message),
+      warn: (message: string) => console.warn(message),
+      error: (message: string) => console.error(message),
+      configure: () => {
+        /* empty implementation */
+      },
+      enable: () => {
+        /* empty implementation */
+      },
+      disable: () => {
+        /* empty implementation */
+      },
+      isEnabled: () => false,
+    };
+  }
+};
+
+// Singleton logger instance for direct use
+const logger = new Logger('Global');
+export default logger;
