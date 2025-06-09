@@ -65,6 +65,7 @@ const DraggableEvent: React.FC<DraggableEventProps> = ({
   const backgroundColor = event.color || theme.primaryColor;
   const textColor = getTextColor(backgroundColor);
 
+  console.log('event', event);
   // Handle drag start
   const handleDragStart = useCallback(() => {
     logger.debug('Drag started', { eventId: event.id });
