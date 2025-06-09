@@ -88,13 +88,27 @@ const CalendarContext = createContext<CalendarContextType>({
   isDragEnabled: true,
   timeChangeConfirmation: defaultTimeChangeConfirmation,
   hourHeight: LAYOUT_CONFIG.HOUR_HEIGHT,
-  setViewType: () => {},
-  setSelectedDate: () => {},
-  setZoomLevel: () => {},
-  setIsDragEnabled: () => {},
-  showTimeChangeConfirmation: () => {},
-  hideTimeChangeConfirmation: () => {},
-  confirmTimeChange: () => {},
+  setViewType: () => {
+    throw new Error('setViewType was called outside of the CalendarProvider');
+  },
+  setSelectedDate: () => {
+    throw new Error('setSelectedDate was called outside of the CalendarProvider');
+  },
+  setZoomLevel: () => {
+    throw new Error('setZoomLevel was called outside of the CalendarProvider');
+  },
+  setIsDragEnabled: () => {
+    throw new Error('setIsDragEnabled was called outside of the CalendarProvider');
+  },
+  showTimeChangeConfirmation: () => {
+    throw new Error('showTimeChangeConfirmation was called outside of the CalendarProvider');
+  },
+  hideTimeChangeConfirmation: () => {
+    throw new Error('hideTimeChangeConfirmation was called outside of the CalendarProvider');
+  },
+  confirmTimeChange: () => {
+    throw new Error('confirmTimeChange was called outside of the CalendarProvider');
+  },
 });
 
 interface CalendarProviderProps {

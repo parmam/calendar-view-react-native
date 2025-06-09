@@ -8,7 +8,7 @@ export { CalendarProvider, useCalendar } from './CalendarContext';
 export { default as CalendarHeader } from './CalendarHeader';
 export { default as SimpleTimeGrid } from './SimpleTimeGrid';
 export { default as MonthView } from './MonthView';
-export { default as Event } from './Event';
+// export { default as Event } from './Event';
 export { default as DraggableEvent } from './DraggableEvent';
 export { default as TimeChangeConfirmationModal } from './TimeChangeConfirmationModal';
 
