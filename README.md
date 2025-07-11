@@ -15,6 +15,7 @@ A customizable, feature-rich calendar component for React Native applications, b
 - Timezone handling
 - Recurring events support
 - Internationalization
+- Configurable drag precision with visual target indicators
 
 ## Installation
 
@@ -106,6 +107,7 @@ export default function App() {
 | firstDayOfWeek  | number                               | 0                     | First day of the week (0 = Sunday, 1 = Monday, etc.) |
 | visibleDays     | number[]                             | [0, 1, 2, 3, 4, 5, 6] | Days to show (0 = Sunday, 1 = Monday, etc.)          |
 | timeInterval    | number                               | 30                    | Time slot interval in minutes                        |
+| calendarConfig  | CalendarConfig                       | defaultCalendarConfig | Advanced calendar configuration                      |
 | onEventPress    | (event: CalendarEvent) => void       | undefined             | Callback when an event is pressed                    |
 | onTimeSlotPress | (start: Date, end: Date) => void     | undefined             | Callback when a time slot is pressed                 |
 | onEventCreate   | (event: CalendarEvent) => void       | undefined             | Callback when a new event is created                 |
@@ -127,6 +129,41 @@ interface CalendarEvent {
   recurrence?: RecurrenceRule;
   metadata?: Record<string, any>;
 }
+```
+
+## Calendar Configuration
+
+The `calendarConfig` prop allows for advanced configuration of the calendar:
+
+```typescript
+interface CalendarConfig {
+  dragPreviewConfig: {
+    previewOffset: number; // Offset in pixels for drag preview
+    connectionLineWidth: number; // Width of connection line between event and preview
+    pagingScrollHours: number; // Hours to scroll when reaching edge
+    enablePagingScroll: boolean; // Enable paging scroll for drag operations
+    showTargetLine?: boolean; // Show a horizontal target line during drag
+    targetLineColor?: string; // Color of the target line (default: green)
+    targetLineHeight?: number; // Height of the target line in pixels
+  };
+  dragPrecision?: number; // Precision in minutes for drag snapping (default: 15)
+}
+```
+
+Example usage:
+
+```jsx
+<Calendar
+  // other props...
+  calendarConfig={{
+    dragPrecision: 15, // Snap to 15-minute intervals
+    dragPreviewConfig: {
+      showTargetLine: true,
+      targetLineColor: '#00FF00', // Bright green line
+      targetLineHeight: 2,
+    },
+  }}
+/>
 ```
 
 ## License

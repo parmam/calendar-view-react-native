@@ -61,7 +61,11 @@ export const defaultCalendarConfig: CalendarConfig = {
     connectionLineWidth: 2,
     pagingScrollHours: 3, // Por defecto, mostrará 3 horas adicionales al hacer scroll
     enablePagingScroll: true, // Activar scroll paginado por defecto
+    showTargetLine: true, // Show the target line by default
+    targetLineColor: '#4CD964', // Green line by default
+    targetLineHeight: 2, // 2px height by default
   },
+  dragPrecision: 15, // Default 15 minutes precision for dragging
 };
 
 // Default time change confirmation state
@@ -88,6 +92,7 @@ const CalendarContext = createContext<CalendarContextType>({
   isDragEnabled: true,
   timeChangeConfirmation: defaultTimeChangeConfirmation,
   hourHeight: LAYOUT_CONFIG.HOUR_HEIGHT,
+  zoomedHourHeight: LAYOUT_CONFIG.HOUR_HEIGHT, // Default value, will be updated
   setViewType: () => {
     throw new Error('setViewType was called outside of the CalendarProvider');
   },
@@ -176,6 +181,9 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
   // Nuevos estados
   const [zoomLevel, setInternalZoomLevel] = useState<number>(initialZoomLevel);
   const [isDragEnabled, setInternalDragEnabled] = useState<boolean>(initialDragEnabled);
+
+  // Base hour height from config
+  const hourHeight = LAYOUT_CONFIG.HOUR_HEIGHT;
 
   // Add state for time change confirmation
   const [timeChangeConfirmation, setTimeChangeConfirmation] = useState<TimeChangeConfirmation>(
@@ -295,7 +303,8 @@ export const CalendarProvider: React.FC<CalendarProviderProps> = ({
     zoomLevel,
     isDragEnabled,
     timeChangeConfirmation,
-    hourHeight: LAYOUT_CONFIG.HOUR_HEIGHT,
+    hourHeight,
+    zoomedHourHeight: hourHeight * zoomLevel,
     onEventPress,
     onTimeSlotPress,
     onEventCreate: handleEventCreate,

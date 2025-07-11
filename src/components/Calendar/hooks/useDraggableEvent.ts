@@ -6,7 +6,6 @@ import { useLogger } from '../utils/logger';
 interface UseDraggableEventProps {
   event: CalendarEvent;
   hourHeight: number;
-  timeInterval: number;
   columnWidth: number;
   onDragStart?: () => void;
   onDragMove?: (deltaX: number, deltaY: number) => void;
@@ -16,7 +15,6 @@ interface UseDraggableEventProps {
 export const useDraggableEvent = ({
   event,
   hourHeight,
-  timeInterval,
   columnWidth,
   onDragStart,
   onDragMove,
@@ -39,7 +37,6 @@ export const useDraggableEvent = ({
 
   // Log if the event is draggable
   const canDrag = event.isDraggable !== false;
-  logger.debug(`Event drag check: ${event.id}, canDrag: ${canDrag}`);
 
   // Create pan responder with improved responsiveness
   const panResponder = useRef(
@@ -79,12 +76,12 @@ export const useDraggableEvent = ({
         Animated.parallel([
           Animated.spring(scale, {
             toValue: 1.05,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
           Animated.timing(opacity, {
             toValue: 0.9,
             duration: 100,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
         ]).start();
 
@@ -94,14 +91,7 @@ export const useDraggableEvent = ({
       // The gesture is moving
       onPanResponderMove: (evt, gestureState) => {
         const { dx, dy } = gestureState;
-        logger.debug(`Drag MOVING for event: ${event.id}, dx: ${dx}, dy: ${dy}`);
-
-        // Update pan position
-        pan.setValue({
-          x: dx,
-          y: dy,
-        });
-
+        // Pass raw dx/dy to the component for logic handling
         onDragMove?.(dx, dy);
       },
 
@@ -113,29 +103,27 @@ export const useDraggableEvent = ({
         // Flatten the offset to avoid issues
         pan.flattenOffset();
 
-        // Calculate final position
-        const finalDeltaX = gestureState.dx;
-        const finalDeltaY = gestureState.dy;
+        const { dx, dy } = gestureState;
 
         // Reset animations
         Animated.parallel([
           Animated.spring(pan, {
             toValue: { x: 0, y: 0 },
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
           Animated.spring(scale, {
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
           Animated.timing(opacity, {
             toValue: 1,
             duration: 100,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
         ]).start();
 
-        // Call the drag end handler
-        onDragEnd?.(finalDeltaX, finalDeltaY);
+        // Call the drag end handler with raw values
+        onDragEnd?.(dx, dy);
       },
 
       // The gesture was cancelled
@@ -147,16 +135,16 @@ export const useDraggableEvent = ({
         Animated.parallel([
           Animated.spring(pan, {
             toValue: { x: 0, y: 0 },
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
           Animated.spring(scale, {
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
           Animated.timing(opacity, {
             toValue: 1,
             duration: 100,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
         ]).start();
       },
@@ -170,6 +158,7 @@ export const useDraggableEvent = ({
   }, []);
 
   return {
+    pan,
     panHandlers: panResponder.panHandlers,
     animatedStyle: {
       transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale }],

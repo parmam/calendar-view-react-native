@@ -578,6 +578,11 @@ const AppContent = () => {
                 ...(calendarConfig.dragPreviewConfig || {}),
                 previewOffset: 20,
                 connectionLineWidth: 2,
+                pagingScrollHours: 3,
+                enablePagingScroll: true,
+                showTargetLine: true,
+                targetLineColor: '#4CD964',
+                targetLineHeight: 2,
               },
             }}
           />

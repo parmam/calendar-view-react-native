@@ -233,10 +233,25 @@ export const DEFAULT_HAPTIC_OPTIONS: HapticOptions = {
  *
  * connectionLineWidth: Ancho en píxeles de la línea que conecta el evento original con su previsualización.
  *                      Afecta la visibilidad de la relación entre evento y previsualización.
+ *
+ * pagingScrollHours: Número de horas adicionales que se mostrarán al hacer scroll paginado.
+ *
+ * enablePagingScroll: Activa o desactiva el scroll paginado durante operaciones de arrastre.
+ *
+ * showTargetLine: Muestra una línea horizontal en la posición donde se soltará el evento.
+ *
+ * targetLineColor: Color de la línea de destino (por defecto verde).
+ *
+ * targetLineHeight: Altura en píxeles de la línea de destino.
  */
 export const DEFAULT_DRAG_PREVIEW_CONFIG: DragPreviewConfig = {
   previewOffset: 20,
-  connectionLineWidth: 0,
+  connectionLineWidth: 2,
+  pagingScrollHours: 3,
+  enablePagingScroll: true,
+  showTargetLine: true,
+  targetLineColor: '#4CD964',
+  targetLineHeight: 2,
 };
 
 /**
@@ -286,7 +301,7 @@ export const DEFAULT_DRAG_PREVIEW_CONFIG: DragPreviewConfig = {
  */
 // Configuración optimizada para el autoscroll basado en cuartiles
 export const DEFAULT_AUTO_SCROLL_CONFIG = {
-  enabled: true,
+  enabled: false,
   edgeThreshold: 50, // No se usa con la nueva lógica de cuartiles, pero dejamos un valor por compatibilidad
   safeAreaSize: 0, // No usamos zona segura con la lógica de cuartiles
   speed: 5, // Velocidad base aumentada

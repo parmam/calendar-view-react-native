@@ -71,12 +71,15 @@ export type HapticOptions = {
   error?: 'light' | 'medium' | 'heavy';
 };
 
-export type DragPreviewConfig = {
-  previewOffset: number; // Offset in pixels for the drag preview from the event being moved
-  connectionLineWidth?: number; // Width of the connection line between original event and preview
-  pagingScrollHours?: number; // Number of hours to scroll when reaching edge (default: 3)
-  enablePagingScroll?: boolean; // Whether to use paging scroll instead of continuous scroll (default: true)
-};
+export interface DragPreviewConfig {
+  previewOffset: number;
+  connectionLineWidth: number;
+  pagingScrollHours: number;
+  enablePagingScroll: boolean;
+  showTargetLine?: boolean;
+  targetLineColor?: string;
+  targetLineHeight?: number;
+}
 
 export type AutoScrollConfig = {
   enabled: boolean; // Activar/desactivar el auto-scroll
@@ -90,10 +93,11 @@ export type AutoScrollConfig = {
   frameInterval: number; // Intervalo de tiempo entre frames (ms)
 };
 
-export type CalendarConfig = {
+export interface CalendarConfig {
   dragPreviewConfig: DragPreviewConfig;
   autoScrollConfig?: AutoScrollConfig;
-};
+  dragPrecision?: number; // Precision in minutes for drag snapping
+}
 
 export interface TimeChangeConfirmation {
   visible: boolean;
@@ -120,6 +124,7 @@ export type CalendarContextType = {
   isDragEnabled: boolean;
   timeChangeConfirmation: TimeChangeConfirmation;
   hourHeight: number;
+  zoomedHourHeight: number;
   onEventPress?: (event: CalendarEvent) => void;
   onTimeSlotPress?: (start: Date, end: Date) => void;
   onEventCreate?: (event: CalendarEvent) => void;

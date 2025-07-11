@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { NativeSyntheticEvent, NativeScrollEvent, ScrollView, ScrollViewProps } from 'react-native';
-import { logger } from './logger';
+import { useLogger } from './logger';
 
 /**
  * Scroll position data
@@ -14,6 +14,9 @@ export interface ScrollPosition {
  * Hook for managing scroll position in calendar views
  */
 export const useScrollHandler = (initialPosition: ScrollPosition = { x: 0, y: 0 }) => {
+  // Initialize logger
+  const logger = useLogger('ScrollHandler');
+
   // Reference to the ScrollView component
   const scrollViewRef = useRef<ScrollView>(null);
 

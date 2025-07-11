@@ -92,7 +92,9 @@ const TimeChangeConfirmationModal: React.FC = () => {
       // Force hide modal if possible
       try {
         hideTimeChangeConfirmation();
-      } catch {}
+      } catch {
+        console.log('Error hiding time change confirmation');
+      }
     }
   };
 

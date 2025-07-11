@@ -22,7 +22,6 @@ import { useLogger } from './utils/logger';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TIME_LABEL_WIDTH = 50;
-const HOUR_HEIGHT = 60;
 
 interface SimpleTimeGridProps {
   viewType: CalendarViewType;
@@ -42,9 +41,16 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
     onTimeSlotPress,
     zoomLevel,
     showTimeChangeConfirmation,
+    calendarConfig,
+    timeInterval,
+    hourHeight, // Base height
+    zoomedHourHeight, // Scaled height
   } = useCalendar();
 
   const [gridWidth, setGridWidth] = useState(SCREEN_WIDTH - TIME_LABEL_WIDTH);
+
+  // Get drag precision from config (default to timeInterval if not specified)
+  const dragPrecision = calendarConfig?.dragPrecision || timeInterval || 15; // Default to 15 minutes if nothing else available
 
   // Generate hours
   const hours = useMemo(() => {
@@ -105,8 +111,8 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
     const startHour = event.start.getHours() + event.start.getMinutes() / 60;
     const endHour = event.end.getHours() + event.end.getMinutes() / 60;
 
-    const top = (startHour - timeRange.start) * HOUR_HEIGHT * zoomLevel;
-    const height = (endHour - startHour) * HOUR_HEIGHT * zoomLevel;
+    const top = (startHour - timeRange.start) * zoomedHourHeight;
+    const height = (endHour - startHour) * zoomedHourHeight;
 
     return { top, height: Math.max(height, 20) };
   };
@@ -173,6 +179,7 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
           columnWidth={columnWidth}
           dayIndex={dayIndex}
           onEventUpdate={handleEventUpdate}
+          dragPrecision={dragPrecision}
         />
       );
     });
@@ -209,17 +216,14 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={{
-          height: hours.length * HOUR_HEIGHT * zoomLevel,
+          height: hours.length * zoomedHourHeight,
         }}
       >
         <View style={styles.timeGrid}>
           {/* Time labels */}
           <View style={[styles.timeLabelsContainer, { width: TIME_LABEL_WIDTH }]}>
             {hours.map(hour => (
-              <View
-                key={`time-${hour}`}
-                style={[styles.timeLabel, { height: HOUR_HEIGHT * zoomLevel }]}
-              >
+              <View key={`time-${hour}`} style={[styles.timeLabel, { height: zoomedHourHeight }]}>
                 <Text style={[styles.timeLabelText, { color: theme.textColor }]}>
                   {formatTime(new Date(new Date().setHours(hour, 0, 0, 0)), locale)}
                 </Text>
@@ -237,7 +241,7 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
                   style={[
                     styles.gridLine,
                     {
-                      top: (hour - timeRange.start) * HOUR_HEIGHT * zoomLevel,
+                      top: (hour - timeRange.start) * zoomedHourHeight,
                       borderTopColor: theme.gridLineColor,
                     },
                   ]}
@@ -271,8 +275,8 @@ const SimpleTimeGrid: React.FC<SimpleTimeGridProps> = ({ viewType, onEventUpdate
                     style={[
                       styles.timeSlot,
                       {
-                        top: (hour - timeRange.start) * HOUR_HEIGHT * zoomLevel,
-                        height: HOUR_HEIGHT * zoomLevel,
+                        top: (hour - timeRange.start) * zoomedHourHeight,
+                        height: zoomedHourHeight,
                       },
                     ]}
                     onPress={() => handleTimeSlotPress(date, hour, 0)}
